@@ -1,0 +1,12 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Assistente de Voz
+GenericName=Assistente de Voz com IA (Claude)
+Comment=Pergunte por voz, a Claude responde por voz
+Exec=/home/willem/Documents/GitHub/assistente-voz/run.sh
+Icon=/home/willem/Documents/GitHub/assistente-voz/assets/avatar.png
+Terminal=false
+Categories=Utility;AudioVideo;
+Keywords=voz;assistente;ia;claude;audio;chat;
+StartupNotify=true
