@@ -13,7 +13,8 @@ from typing import Callable, Optional
 import gi
 
 gi.require_version("Gtk", "3.0")
-from gi.repository import Gio, GLib, Gtk
+gi.require_version("GdkPixbuf", "2.0")
+from gi.repository import GdkPixbuf, Gio, GLib, Gtk
 
 SNI_XML = """
 <node>
@@ -25,6 +26,7 @@ SNI_XML = """
     <property name='WindowId' type='i' access='read'/>
     <property name='IconName' type='s' access='read'/>
     <property name='IconThemePath' type='s' access='read'/>
+    <property name='IconPixmap' type='a(iiay)' access='read'/>
     <property name='Menu' type='o' access='read'/>
     <property name='ItemIsMenu' type='b' access='read'/>
     <property name='ToolTip' type='(sa(iiay)ss)' access='read'/>
@@ -110,13 +112,48 @@ class TrayManager:
         self._icone_path = icone_path
 
         self._status_texto = "Diga \"Acorda, Neo\" pra começar"
-        self._icone_nome = "audio-input-microphone-symbolic"
+        self._estado = "escutando"
+        self._icone_nome = "acordaneo"
+        self._menu_revision = 1
         self._sni_ativo = False
         self._gtk_status_icon = None
+
+        # Carrega pixmaps em múltiplos tamanhos para envio direto ao painel
+        self._icon_pixmaps = self._gerar_pixmaps()
 
         self._iniciar_sni()
         if not self._sni_ativo:
             self._iniciar_fallback_gtk()
+
+    def _gerar_pixmaps(self):
+        caminho = self._icone_path or (Path.home() / ".local/share/icons/acordaneo.png")
+        if not caminho or not caminho.exists():
+            return []
+        pixmaps = []
+        for tamanho in (22, 24, 32, 48):
+            try:
+                pb = GdkPixbuf.Pixbuf.new_from_file_at_scale(str(caminho), tamanho, tamanho, True)
+                w, h = pb.get_width(), pb.get_height()
+                pixels = pb.get_pixels()
+                rowstride = pb.get_rowstride()
+                n_channels = pb.get_n_channels()
+                argb = bytearray(w * h * 4)
+                for y in range(h):
+                    for x in range(w):
+                        offset = y * rowstride + x * n_channels
+                        r = pixels[offset]
+                        g = pixels[offset + 1]
+                        b = pixels[offset + 2]
+                        a = pixels[offset + 3] if n_channels == 4 else 255
+                        idx = (y * w + x) * 4
+                        argb[idx] = a
+                        argb[idx + 1] = r
+                        argb[idx + 2] = g
+                        argb[idx + 3] = b
+                pixmaps.append((w, h, bytes(argb)))
+            except Exception:
+                pass
+        return pixmaps
 
     def _iniciar_sni(self):
         try:
@@ -161,18 +198,32 @@ class TrayManager:
     def _iniciar_fallback_gtk(self):
         try:
             self._gtk_status_icon = Gtk.StatusIcon()
-            self._gtk_status_icon.set_from_icon_name(self._icone_nome)
+            if self._icone_path and self._icone_path.exists():
+                self._gtk_status_icon.set_from_file(str(self._icone_path))
+            else:
+                self._gtk_status_icon.set_from_icon_name("acordaneo")
             self._gtk_status_icon.set_tooltip_text(f"Acorda, Neo — {self._status_texto}")
             self._gtk_status_icon.connect("activate", lambda *_a: self._ao_alternar())
-            self._gtk_status_icon.connect("popup-menu", self._mostrar_menu_gtk)
+            self._gtk_status_icon.connect(
+                "popup-menu",
+                lambda icon, button, time: self._mostrar_menu_gtk(
+                    icon=icon, button=button, activate_time=time
+                ),
+            )
             print("[tray] Fallback ativado com Gtk.StatusIcon")
         except Exception as e:
             print(f"[tray] Fallback Gtk.StatusIcon não disponível: {e}")
 
-    def _mostrar_menu_gtk(self, icon, button, activate_time):
+    def _mostrar_menu_gtk(self, icon=None, button=3, activate_time=0, x=None, y=None):
         menu = Gtk.Menu()
 
-        item_janela = Gtk.MenuItem(label="Mostrar / Ocultar")
+        item_status = Gtk.MenuItem(label=f"Neo: {self._status_texto}")
+        item_status.set_sensitive(False)
+        menu.append(item_status)
+
+        menu.append(Gtk.SeparatorMenuItem())
+
+        item_janela = Gtk.MenuItem(label="Mostrar / Ocultar Janela")
         item_janela.connect("activate", lambda *_a: self._ao_alternar())
         menu.append(item_janela)
 
@@ -182,12 +233,17 @@ class TrayManager:
 
         menu.append(Gtk.SeparatorMenuItem())
 
-        item_sair = Gtk.MenuItem(label="Sair")
+        item_sair = Gtk.MenuItem(label="Encerrar o aplicativo")
         item_sair.connect("activate", lambda *_a: self._ao_sair())
         menu.append(item_sair)
 
         menu.show_all()
-        menu.popup(None, None, Gtk.StatusIcon.position_menu, icon, button, activate_time)
+        if self._gtk_status_icon:
+            menu.popup(
+                None, None, Gtk.StatusIcon.position_menu, self._gtk_status_icon, button, activate_time
+            )
+        else:
+            menu.popup_at_pointer(None)
 
     # ----------------------------------------------------------- SNI Handlers
 
@@ -195,8 +251,9 @@ class TrayManager:
         if method in ("Activate", "SecondaryActivate"):
             GLib.idle_add(self._ao_alternar)
         elif method == "ContextMenu":
-            # Abre menu de contexto
-            pass
+            x = params[0] if len(params) > 0 else 0
+            y = params[1] if len(params) > 1 else 0
+            GLib.idle_add(lambda: self._mostrar_menu_gtk(x=x, y=y))
         inv.return_value(None)
 
     def _handle_sni_get_property(self, conn, sender, path, iface, name):
@@ -206,15 +263,16 @@ class TrayManager:
             "Title": GLib.Variant("s", "Acorda, Neo"),
             "Status": GLib.Variant("s", "Active"),
             "WindowId": GLib.Variant("i", 0),
-            "IconName": GLib.Variant("s", self._icone_nome),
-            "IconThemePath": GLib.Variant("s", str(self._icone_path.parent) if self._icone_path else ""),
+            "IconName": GLib.Variant("s", "acordaneo"),
+            "IconThemePath": GLib.Variant("s", str(Path.home() / ".local/share/icons")),
+            "IconPixmap": GLib.Variant("a(iiay)", self._icon_pixmaps),
             "Menu": GLib.Variant("o", "/MenuBar"),
             "ItemIsMenu": GLib.Variant("b", False),
             "ToolTip": GLib.Variant(
                 "(sa(iiay)ss)",
                 (
-                    self._icone_nome,
-                    [],
+                    "acordaneo",
+                    self._icon_pixmaps,
                     "Acorda, Neo",
                     self._status_texto,
                 ),
@@ -224,19 +282,71 @@ class TrayManager:
 
     # ------------------------------------------------------ DBusMenu Handlers
 
-    def _handle_menu_call(self, conn, sender, path, iface, method, params, inv):
-        if method == "GetLayout":
-            item_toggle = GLib.Variant("(ia{sv}av)", (1, {"label": GLib.Variant("s", "Mostrar / Ocultar")}, []))
-            item_pref = GLib.Variant("(ia{sv}av)", (2, {"label": GLib.Variant("s", "Preferências...")}, []))
-            item_sep = GLib.Variant("(ia{sv}av)", (3, {"type": GLib.Variant("s", "separator")}, []))
-            item_sair = GLib.Variant("(ia{sv}av)", (4, {"label": GLib.Variant("s", "Sair")}, []))
+    def _obter_itens_menu(self):
+        status_label = f"Neo: {self._status_texto}"
+        return {
+            100: {
+                "label": GLib.Variant("s", status_label),
+                "enabled": GLib.Variant("b", False),
+                "visible": GLib.Variant("b", True),
+            },
+            1: {
+                "label": GLib.Variant("s", "Mostrar / Ocultar Janela"),
+                "enabled": GLib.Variant("b", True),
+                "visible": GLib.Variant("b", True),
+            },
+            2: {
+                "label": GLib.Variant("s", "Preferências..."),
+                "enabled": GLib.Variant("b", True),
+                "visible": GLib.Variant("b", True),
+            },
+            3: {
+                "type": GLib.Variant("s", "separator"),
+                "visible": GLib.Variant("b", True),
+            },
+            4: {
+                "label": GLib.Variant("s", "Encerrar o aplicativo"),
+                "enabled": GLib.Variant("b", True),
+                "visible": GLib.Variant("b", True),
+            },
+        }
 
-            root = (0, {"children-display": GLib.Variant("s", "submenu")}, [item_toggle, item_pref, item_sep, item_sair])
-            inv.return_value(GLib.Variant("(u(ia{sv}av))", (1, root)))
+    def _handle_menu_call(self, conn, sender, path, iface, method, params, inv):
+        menu_items = self._obter_itens_menu()
+
+        if method == "GetLayout":
+            children = [
+                GLib.Variant("(ia{sv}av)", (item_id, menu_items[item_id], []))
+                for item_id in [100, 1, 2, 3, 4]
+            ]
+            root = (0, {"children-display": GLib.Variant("s", "submenu")}, children)
+            inv.return_value(GLib.Variant("(u(ia{sv}av))", (self._menu_revision, root)))
+
         elif method == "GetGroupProperties":
-            inv.return_value(GLib.Variant("(a(ia{sv}))", ([],)))
+            ids = list(params[0])
+            names = set(params[1]) if len(params) > 1 and params[1] else set()
+            res = []
+            for item_id in ids:
+                if item_id in menu_items:
+                    props = menu_items[item_id]
+                    if names:
+                        filtered = {k: v for k, v in props.items() if k in names}
+                    else:
+                        filtered = props
+                    res.append((item_id, filtered))
+            inv.return_value(GLib.Variant("(a(ia{sv}))", (res,)))
+
+        elif method == "GetProperty":
+            item_id = params[0]
+            prop_name = params[1]
+            if item_id in menu_items and prop_name in menu_items[item_id]:
+                inv.return_value(GLib.Variant("(v)", (menu_items[item_id][prop_name],)))
+            else:
+                inv.return_value(GLib.Variant("(v)", (GLib.Variant("s", ""),)))
+
         elif method == "AboutToShow":
             inv.return_value(GLib.Variant("(b)", (False,)))
+
         elif method == "Event":
             item_id = params[0]
             event_id = params[1]
@@ -256,7 +366,7 @@ class TrayManager:
             "Version": GLib.Variant("u", 3),
             "TextDirection": GLib.Variant("s", "ltr"),
             "Status": GLib.Variant("s", "normal"),
-            "IconThemePath": GLib.Variant("as", []),
+            "IconThemePath": GLib.Variant("as", [str(Path.home() / ".local/share/icons")]),
         }
         return props.get(name)
 
@@ -264,15 +374,8 @@ class TrayManager:
 
     def definir_status(self, texto: str, estado: str = "escutando"):
         self._status_texto = texto
-
-        if estado == "escutando":
-            self._icone_nome = "audio-input-microphone-symbolic"
-        elif estado == "pensando":
-            self._icone_nome = "system-run-symbolic"
-        elif estado == "falando":
-            self._icone_nome = "audio-volume-high-symbolic"
-        else:
-            self._icone_nome = "audio-input-microphone-symbolic"
+        self._estado = estado
+        self._menu_revision += 1
 
         if self._sni_ativo:
             try:
@@ -285,14 +388,27 @@ class TrayManager:
                 )
                 self._bus.emit_signal(
                     None,
-                    "/StatusNotifierItem",
-                    "org.kde.StatusNotifierItem",
-                    "NewIcon",
-                    None,
+                    "/MenuBar",
+                    "com.canonical.dbusmenu",
+                    "LayoutUpdated",
+                    GLib.Variant("(ui)", (self._menu_revision, 0)),
                 )
             except Exception:
                 pass
 
         if self._gtk_status_icon:
-            self._gtk_status_icon.set_from_icon_name(self._icone_nome)
             self._gtk_status_icon.set_tooltip_text(f"Acorda, Neo — {texto}")
+
+    def destruir(self):
+        """Limpa registros DBus e bandeja ao encerrar a aplicação."""
+        if self._sni_ativo and hasattr(self, "_bus") and self._bus:
+            try:
+                if hasattr(self, "_sni_reg_id") and self._sni_reg_id:
+                    self._bus.unregister_object(self._sni_reg_id)
+                if hasattr(self, "_menu_reg_id") and self._menu_reg_id:
+                    self._bus.unregister_object(self._menu_reg_id)
+            except Exception:
+                pass
+        if self._gtk_status_icon:
+            self._gtk_status_icon.set_visible(False)
+

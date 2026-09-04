@@ -360,7 +360,10 @@ class JanelaPrincipal(Gtk.Window):
 
     def _sair_aplicativo(self):
         self._escutando = False
+        if hasattr(self, "_tray") and self._tray:
+            self._tray.destruir()
         Gtk.main_quit()
+        os._exit(0)
 
     def _ao_fechar(self, *_args):
         self._sair_aplicativo()
