@@ -88,4 +88,21 @@ def sintetizar(texto: str) -> Path:
     with wave.open(str(destino), "wb") as wav_file:
         voz.synthesize_wav(texto, wav_file)
 
+    # Adiciona 250ms de silêncio ao final para garantir que o buffer da placa de som
+    # não corte a última palavra/sílaba da fala
+    try:
+        with wave.open(str(destino), "rb") as r:
+            params = r.getparams()
+            frames = r.readframes(r.getnframes())
+
+        sample_rate = params.framerate
+        silence_samples = int(sample_rate * 0.25)
+        silence_bytes = b"\x00" * (silence_samples * params.nchannels * params.sampwidth)
+
+        with wave.open(str(destino), "wb") as w:
+            w.setparams(params)
+            w.writeframes(frames + silence_bytes)
+    except Exception as e:
+        print(f"[piper_tts] Aviso ao adicionar margem de silêncio: {e}")
+
     return destino

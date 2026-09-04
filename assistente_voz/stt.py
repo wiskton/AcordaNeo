@@ -267,13 +267,20 @@ def contem_palavra_ativacao(
     palavras = set(texto_normalizado.split())
 
     if durante_fala:
+        # Palavras de comando explícito para cessar fala
         gatilhos_interrupcao = {
-            "acorda", "acorde", "corda", "desperte",
-            "para", "pare", "cancela", "cancelar", "silêncio", "silencio",
+            "pare", "parar", "cancela", "cancelar", "silêncio", "silencio",
             "calado", "chega", "interromper", "basta"
         }
         if palavras.intersection(gatilhos_interrupcao):
             return True
+
+        # Expressões compostas com 'para' (evita falso positivo com a preposição 'para')
+        frase_com_espacos = f" {texto_normalizado} "
+        if any(g in frase_com_espacos for g in (" para de falar ", " para ai ", " para tudo ", " para agora ")):
+            return True
+
+        # Palavra de ativação completa (ex: 'acorda neo', 'computador', 'jarvis')
         tokens_alvo = set(
             palavra_alvo.lower()
             .replace(",", " ")

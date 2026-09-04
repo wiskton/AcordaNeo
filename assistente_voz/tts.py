@@ -3,6 +3,7 @@ mesmas vozes neurais usadas no "Ler em voz alta" do navegador Edge).
 """
 
 import asyncio
+import shutil
 import subprocess
 import tempfile
 import threading
@@ -37,8 +38,33 @@ async def _sintetizar_async(texto: str, identificador_voz: str, destino: Path):
     pitch = perfil.get("pitch", "-20Hz")
     rate = perfil.get("rate", "-7%")
 
-    comunicador = edge_tts.Communicate(texto, voz_real, pitch=pitch, rate=rate)
+    # Garante pontuação final suave para que a entonação do TTS finalize com pausa natural
+    t = texto.strip()
+    if not t.endswith((".", "!", "?", ":", ";")):
+        t += "."
+    t += " ."
+
+    comunicador = edge_tts.Communicate(t, voz_real, pitch=pitch, rate=rate)
     await comunicador.save(str(destino))
+
+
+def _obter_comando_reproducao(caminho_audio: Path) -> list:
+    """Prioriza pw-play (PipeWire) e paplay (PulseAudio) que drenam o buffer de hardware
+    completamente antes de sair, evitando corte da última sílaba em áudios curtos.
+    """
+    sufixo = caminho_audio.suffix.lower()
+    if sufixo == ".wav":
+        if shutil.which("pw-play"):
+            return ["pw-play", str(caminho_audio)]
+        if shutil.which("paplay"):
+            return ["paplay", str(caminho_audio)]
+        if shutil.which("aplay"):
+            return ["aplay", "-q", str(caminho_audio)]
+    elif sufixo == ".mp3":
+        if shutil.which("pw-play"):
+            return ["pw-play", str(caminho_audio)]
+
+    return ["ffplay", "-nodisp", "-autoexit", "-loglevel", "quiet", str(caminho_audio)]
 
 
 def sintetizar(texto: str, voz: str = "neo", motor: str = "edge") -> Path:
@@ -64,7 +90,7 @@ def sintetizar(texto: str, voz: str = "neo", motor: str = "edge") -> Path:
 
 
 def iniciar_reproducao(caminho_audio: Path) -> Optional[subprocess.Popen]:
-    """Inicia a reprodução do áudio em segundo plano com ffplay e devolve o processo.
+    """Inicia a reprodução do áudio em segundo plano e devolve o processo.
     Permite monitorar e interromper a fala em tempo real (barge-in).
     """
     global _processo_audio, _caminho_audio_atual
@@ -73,14 +99,15 @@ def iniciar_reproducao(caminho_audio: Path) -> Optional[subprocess.Popen]:
     with _lock_audio:
         try:
             _caminho_audio_atual = caminho_audio
+            cmd = _obter_comando_reproducao(caminho_audio)
             _processo_audio = subprocess.Popen(
-                ["ffplay", "-nodisp", "-autoexit", "-loglevel", "quiet", str(caminho_audio)],
+                cmd,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )
             return _processo_audio
         except Exception as exc:
-            print(f"[tts] Erro ao iniciar reprodução com ffplay: {exc}")
+            print(f"[tts] Erro ao iniciar reprodução com {cmd}: {exc}")
             if caminho_audio:
                 caminho_audio.unlink(missing_ok=True)
             _caminho_audio_atual = None

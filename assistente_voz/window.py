@@ -6,11 +6,13 @@ Prioriza inteligência local 100% offline via Ollama, com Claude como opção.
 """
 
 import os
+import subprocess
 import tempfile
 import threading
 import time
 import traceback
 import unicodedata
+import wave
 from pathlib import Path
 
 import gi
@@ -608,28 +610,66 @@ class JanelaPrincipal(Gtk.Window):
                 except Exception:
                     pass
 
+    def _obter_duracao_audio(self, caminho_audio: Path) -> float:
+        """Estima a duração em segundos do arquivo de áudio para evitar cortes em falas curtas."""
+        try:
+            if caminho_audio.suffix.lower() == ".wav":
+                with wave.open(str(caminho_audio), "rb") as w:
+                    return w.getnframes() / float(w.getframerate())
+            res = subprocess.run(
+                [
+                    "ffprobe", "-v", "error", "-show_entries", "format=duration",
+                    "-of", "default=noprint_wrappers=1:nokey=1", str(caminho_audio)
+                ],
+                capture_output=True,
+                text=True,
+                timeout=1.0,
+            )
+            if res.returncode == 0 and res.stdout.strip():
+                return float(res.stdout.strip())
+        except Exception:
+            pass
+        return 4.0
+
     def _reproduzir_resposta_com_interrupcao(self, caminho_audio: Path) -> bool:
-        """Reproduz a resposta do Neo enquanto escuta trechos curtos para interrupção (Barge-in).
-        Retorna True se o usuário chamou a frase de ativação ou pediu para parar durante a fala,
-        ou False se a reprodução terminou normalmente.
+        """Reproduz a resposta do Neo com proteção total para áudios curtos e barge-in para áudios longos.
+        Retorna True se o usuário interrompeu a fala, ou False se a reprodução terminou normalmente.
         """
         proc = tts.iniciar_reproducao(caminho_audio)
         if proc is None:
             return False
 
+        duracao = self._obter_duracao_audio(caminho_audio)
+
+        # Se a resposta for curta (< 3.0s), NÃO ativa escuta concorrente no microfone.
+        # Isso impede que o eco do próprio alto-falante acione o barge-in e corte a fala prematuramente.
+        if duracao < 3.0:
+            while self._escutando and proc.poll() is None:
+                time.sleep(0.05)
+            # Margem suave para drenagem total do buffer de hardware PipeWire/PulseAudio
+            time.sleep(0.12)
+            tts.parar()
+            return False
+
         interrompido = False
         palavra_chave = self._config.get("palavra_ativacao", config.DEFAULT_WAKE_WORD)
+
+        # Carência inicial de 1.2s para respostas longas: o usuário não interrompe no primeiro segundo
+        # e o microfone não pega o início da frase pelo alto-falante.
+        tempo_inicio = time.time()
+        while self._escutando and proc.poll() is None and (time.time() - tempo_inicio < 1.2):
+            time.sleep(0.05)
+
         try:
             while self._escutando and proc.poll() is None:
                 clipe = stt.gravar_clipe(DURACAO_CLIPE_INTERRUPCAO)
                 if proc.poll() is not None:
-                    # A fala terminou normalmente durante ou logo após a gravação
                     if clipe:
                         clipe.unlink(missing_ok=True)
                     break
 
                 if clipe is None:
-                    time.sleep(0.1)
+                    time.sleep(0.05)
                     continue
 
                 if stt.contem_palavra_ativacao(clipe, durante_fala=True, palavra_chave=palavra_chave):
