@@ -19,7 +19,6 @@ from gi.repository import GdkPixbuf, GLib, Gtk
 
 from . import config
 from . import stt
-from .chatgpt_web import ChatGPTWebClient, ChatGPTWebError
 from .claude_client import ClaudeClient
 from .tts import sintetizar, tocar
 
@@ -44,14 +43,13 @@ class JanelaPrincipal(Gtk.Window):
 
         self._config = config.carregar()
         self._claude = None
-        self._chatgpt_web = None
         self._ocupado = False
         self._escutando = True
 
         self._montar_ui()
         self.connect("destroy", self._ao_fechar)
 
-        if not self._tem_credenciais_do_provedor_atual():
+        if not self._tem_chave_api():
             GLib.idle_add(self._abrir_preferencias, True)
 
         thread_escuta = threading.Thread(target=self._loop_escuta_continua, daemon=True)
@@ -93,19 +91,10 @@ class JanelaPrincipal(Gtk.Window):
         scroll.add(self._chat_box)
         self._scroll_window = scroll
 
-        # --- Rodapé: seletor de provedor (Claude/ChatGPT) e de voz, sem botão ----
-        rodape = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        # --- Rodapé: seletor de voz --------------------------------------------
+        rodape = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         rodape.set_border_width(16)
         raiz.pack_start(rodape, False, False, 0)
-
-        rodape.pack_start(Gtk.Label(label="Quem responde:", xalign=0), False, False, 0)
-
-        self._provedor_combo = Gtk.ComboBoxText()
-        for id_provedor, nome in config.PROVEDORES_DISPONIVEIS:
-            self._provedor_combo.append(id_provedor, nome)
-        self._provedor_combo.set_active_id(self._config.get("provedor", config.DEFAULT_PROVEDOR))
-        self._provedor_combo.connect("changed", self._on_trocar_provedor)
-        rodape.pack_start(self._provedor_combo, False, False, 0)
 
         rodape.pack_start(Gtk.Label(label="Voz das respostas:", xalign=0), False, False, 0)
 
@@ -165,39 +154,13 @@ class JanelaPrincipal(Gtk.Window):
         box.set_border_width(16)
         box.set_spacing(10)
 
-        box.add(Gtk.Label(label="<b>Claude (API oficial)</b>", use_markup=True, xalign=0))
+        box.add(Gtk.Label(label="<b>Claude (API Anthropic)</b>", use_markup=True, xalign=0))
         box.add(Gtk.Label(label="Chave da API da Anthropic:", xalign=0))
         entrada_chave = Gtk.Entry()
         entrada_chave.set_visibility(False)
         entrada_chave.set_text(self._config.get("anthropic_api_key", ""))
         entrada_chave.set_placeholder_text("sk-ant-...")
         box.add(entrada_chave)
-
-        box.add(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
-        box.add(Gtk.Label(label="<b>ChatGPT (navegador, gambiarra)</b>", use_markup=True, xalign=0))
-        aviso_chatgpt = Gtk.Label(
-            label="Faz login na sua conta do ChatGPT num navegador Chrome de verdade — "
-            "a sessão fica salva, só precisa logar de novo se expirar.",
-            xalign=0,
-        )
-        aviso_chatgpt.set_line_wrap(True)
-        box.add(aviso_chatgpt)
-
-        box.add(Gtk.Label(label="E-mail do ChatGPT:", xalign=0))
-        entrada_email = Gtk.Entry()
-        entrada_email.set_text(self._config.get("chatgpt_email", ""))
-        entrada_email.set_placeholder_text("voce@email.com")
-        box.add(entrada_email)
-
-        box.add(Gtk.Label(label="Senha do ChatGPT:", xalign=0))
-        entrada_senha = Gtk.Entry()
-        entrada_senha.set_visibility(False)
-        entrada_senha.set_text(self._config.get("chatgpt_senha", ""))
-        box.add(entrada_senha)
-
-        check_headless = Gtk.CheckButton(label="Rodar em segundo plano (sem mostrar a janela do navegador)")
-        check_headless.set_active(bool(self._config.get("chatgpt_headless", True)))
-        box.add(check_headless)
 
         box.add(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
         box.add(Gtk.Label(label="Voz padrão:", xalign=0))
@@ -209,7 +172,7 @@ class JanelaPrincipal(Gtk.Window):
 
         if obrigatorio:
             aviso = Gtk.Label(
-                label="Configure a Claude ou o ChatGPT (pelo menos um) pra começar a usar o assistente."
+                label="Configure a chave da API da Claude (Anthropic) pra começar a usar o assistente."
             )
             aviso.set_line_wrap(True)
             box.add(aviso)
@@ -219,29 +182,16 @@ class JanelaPrincipal(Gtk.Window):
 
         if resposta == Gtk.ResponseType.OK:
             self._config["anthropic_api_key"] = entrada_chave.get_text().strip()
-            self._config["chatgpt_email"] = entrada_email.get_text().strip()
-            self._config["chatgpt_senha"] = entrada_senha.get_text()
-            self._config["chatgpt_headless"] = check_headless.get_active()
             self._config["voz"] = combo_voz.get_active_id() or config.DEFAULT_VOICE
             config.salvar(self._config)
             self._voz_combo.set_active_id(self._config["voz"])
-            self._claude = None  # força recriar os clientes com as credenciais novas
-            if self._chatgpt_web is not None:
-                self._chatgpt_web.fechar()
-                self._chatgpt_web = None
+            self._claude = None  # força recriar o cliente com a chave nova
 
         dialogo.destroy()
         return False
 
-    def _tem_credenciais_do_provedor_atual(self) -> bool:
-        provedor = self._config.get("provedor", config.DEFAULT_PROVEDOR)
-        if provedor == config.PROVEDOR_CHATGPT_WEB:
-            return bool(self._config.get("chatgpt_email")) and bool(self._config.get("chatgpt_senha"))
+    def _tem_chave_api(self) -> bool:
         return bool(self._config.get("anthropic_api_key"))
-
-    def _on_trocar_provedor(self, combo):
-        self._config["provedor"] = combo.get_active_id() or config.DEFAULT_PROVEDOR
-        config.salvar(self._config)
 
     def _on_trocar_voz(self, combo):
         self._config["voz"] = combo.get_active_id() or config.DEFAULT_VOICE
@@ -251,8 +201,6 @@ class JanelaPrincipal(Gtk.Window):
 
     def _ao_fechar(self, *_args):
         self._escutando = False
-        if self._chatgpt_web is not None:
-            self._chatgpt_web.fechar()
         Gtk.main_quit()
 
     def _loop_escuta_continua(self):
@@ -261,7 +209,7 @@ class JanelaPrincipal(Gtk.Window):
         processada ou a resposta está sendo falada, pra não se auto-escutar.
         """
         while self._escutando:
-            if self._ocupado or not self._tem_credenciais_do_provedor_atual():
+            if self._ocupado or not self._tem_chave_api():
                 time.sleep(0.2)
                 continue
 
@@ -360,14 +308,8 @@ class JanelaPrincipal(Gtk.Window):
                 return
 
             GLib.idle_add(self._adicionar_balao, texto_usuario, "usuario")
-
-            provedor = self._config.get("provedor", config.DEFAULT_PROVEDOR)
-            if provedor == config.PROVEDOR_CHATGPT_WEB:
-                GLib.idle_add(self._definir_status, "🤔 Pensando (ChatGPT)...")
-                resposta = self._perguntar_chatgpt_web(texto_usuario)
-            else:
-                GLib.idle_add(self._definir_status, "🤔 Pensando (Claude)...")
-                resposta = self._perguntar_claude(texto_usuario)
+            GLib.idle_add(self._definir_status, "🤔 Pensando (Claude)...")
+            resposta = self._perguntar_claude(texto_usuario)
 
             GLib.idle_add(self._adicionar_balao, resposta, "assistente")
             GLib.idle_add(self._definir_status, "🗣️ Falando...")
@@ -386,19 +328,3 @@ class JanelaPrincipal(Gtk.Window):
                 model=self._config.get("modelo", config.DEFAULT_MODEL),
             )
         return self._claude.perguntar(texto_usuario)
-
-    def _perguntar_chatgpt_web(self, texto_usuario: str) -> str:
-        if self._chatgpt_web is None:
-            self._chatgpt_web = ChatGPTWebClient(
-                email=self._config.get("chatgpt_email", ""),
-                senha=self._config.get("chatgpt_senha", ""),
-                headless=bool(self._config.get("chatgpt_headless", True)),
-            )
-        try:
-            return self._chatgpt_web.perguntar(texto_usuario)
-        except ChatGPTWebError:
-            # Sessão pode ter travado num estado ruim — descarta o navegador
-            # pra tentar do zero na próxima pergunta, em vez de ficar preso.
-            self._chatgpt_web.fechar()
-            self._chatgpt_web = None
-            raise

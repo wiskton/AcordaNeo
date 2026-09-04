@@ -32,25 +32,11 @@ VOZES_DISPONIVEIS = [
     ("en-US-JennyNeural", "Jenny (EN-US, feminina)"),
 ]
 
-PROVEDOR_CLAUDE = "claude"
-PROVEDOR_CHATGPT_WEB = "chatgpt_web"
-DEFAULT_PROVEDOR = PROVEDOR_CLAUDE
-
-PROVEDORES_DISPONIVEIS = [
-    (PROVEDOR_CLAUDE, "Claude (API oficial)"),
-    (PROVEDOR_CHATGPT_WEB, "ChatGPT (navegador, gambiarra)"),
-]
-
-
 def _defaults():
     return {
         "anthropic_api_key": os.environ.get("ANTHROPIC_API_KEY", ""),
         "voz": DEFAULT_VOICE,
         "modelo": DEFAULT_MODEL,
-        "provedor": DEFAULT_PROVEDOR,
-        "chatgpt_email": "",
-        "chatgpt_senha": "",
-        "chatgpt_headless": True,
     }
 
 
