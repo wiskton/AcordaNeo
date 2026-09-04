@@ -233,22 +233,30 @@ def transcrever(caminho_wav: Optional[Path], idioma: str = "pt") -> str:
     return texto
 
 
-def contem_palavra_ativacao(caminho_wav: Optional[Path], idioma: str = "pt") -> bool:
-    """Checa (com o modelo leve) se o trecho contém a frase de ativação.
+def contem_palavra_ativacao(
+    caminho_wav: Optional[Path], idioma: str = "pt", durante_fala: bool = False
+) -> bool:
+    """Checa (com o modelo leve) se o trecho contém a frase de ativação ou pedido de parada.
 
     "Neo" é um nome curto e incomum em português — o Whisper às vezes ouve
     coisas parecidas foneticamente (ex.: "acorda-lhe" em vez de "acorda,
     neo"). Por isso: (1) damos uma dica de vocabulário via initial_prompt,
     e (2) aceitamos variações comuns ("neo", "acorda", "acorde", "néo").
+
+    Se durante_fala=True (Barge-in): só interrompe se houver gatilho explícito
+    como "acorda", "acorde", "pare", "para", "cancela", evitando que menções
+    normais ao nome "Neo" durante a própria resposta causem interrupções acidentais.
     """
     if caminho_wav is None:
         return False
+    dica = "Acorda, Neo." if not durante_fala else "Acorda Neo, pare, para, silêncio."
     texto = _transcrever_com(
-        _get_modelo_ativacao(), caminho_wav, idioma, dica_vocabulario="Acorda, Neo."
+        _get_modelo_ativacao(), caminho_wav, idioma, dica_vocabulario=dica
     )
     caminho_wav.unlink(missing_ok=True)
     if texto:
-        print(f"[stt] ouvi: {texto!r}")
+        contexto = " [DURANTE FALA]" if durante_fala else ""
+        print(f"[stt] ouvi{contexto}: {texto!r}")
     texto_normalizado = (
         texto.lower()
         .replace(",", " ")
@@ -258,6 +266,19 @@ def contem_palavra_ativacao(caminho_wav: Optional[Path], idioma: str = "pt") -> 
         .replace("-", " ")
     )
     palavras = set(texto_normalizado.split())
+
+    if durante_fala:
+        gatilhos_interrupcao = {
+            "acorda", "acorde", "corda", "desperte",
+            "para", "pare", "cancela", "cancelar", "silêncio", "silencio",
+            "calado", "chega", "interromper", "basta"
+        }
+        if palavras.intersection(gatilhos_interrupcao):
+            return True
+        if "neo" in palavras and ("ei" in palavras or "oi" in palavras or "alô" in palavras or "alo" in palavras or "olá" in palavras or "ola" in palavras):
+            return True
+        return False
+
     gatilhos = {"neo", "néo", "nêo", "acorda", "acorde", "corda"}
     return bool(palavras.intersection(gatilhos))
 

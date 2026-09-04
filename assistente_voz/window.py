@@ -20,6 +20,7 @@ from gi.repository import GdkPixbuf, GLib, Gtk
 
 from . import config
 from . import stt
+from . import tts
 from .claude_client import ClaudeClient
 from .ollama_client import OllamaClient, OllamaError
 from .tray import TrayManager
@@ -30,7 +31,8 @@ AVATAR_PATH = ASSETS_DIR / "avatar.png"
 
 DURACAO_CLIPE_ATIVACAO = 3       # segundos por trecho enquanto espera "Acorda, Neo"
 DURACAO_CLIPE_PERGUNTA = 2       # segundos por trecho enquanto ouve a pergunta
-MAX_SILENCIOS_INICIAIS = 3       # até 6s de espera para o usuário começar a falar
+DURACAO_CLIPE_INTERRUPCAO = 1    # segundos por trecho enquanto monitora interrupção (barge-in)
+MAX_SILENCIOS_INICIAIS = 2       # até 4s de espera para o usuário começar a falar
 MAX_SILENCIOS_APOS_FALA = 1      # 2s de pausa após a fala encerra a pergunta
 MAX_SEGUNDOS_PERGUNTA = 25       # teto de segurança pra não gravar pra sempre
 
@@ -305,6 +307,7 @@ class JanelaPrincipal(Gtk.Window):
 
     def _sair_aplicativo(self):
         self._escutando = False
+        tts.parar()
         if hasattr(self, "_tray") and self._tray:
             self._tray.destruir()
         Gtk.main_quit()
@@ -376,7 +379,7 @@ class JanelaPrincipal(Gtk.Window):
                         clipe.unlink(missing_ok=True)
                         silencios_iniciais += 1
                         if silencios_iniciais >= MAX_SILENCIOS_INICIAIS:
-                            # Passaram até 6s e ninguém falou
+                            # Passaram até 4s e ninguém falou
                             break
                     else:
                         # Usuário estava falando e fez pausa
@@ -407,36 +410,78 @@ class JanelaPrincipal(Gtk.Window):
                 except Exception:
                     pass
 
-    def _processar_ciclo_pergunta(self):
+    def _reproduzir_resposta_com_interrupcao(self, caminho_audio: Path) -> bool:
+        """Reproduz a resposta do Neo enquanto escuta trechos curtos para interrupção (Barge-in).
+        Retorna True se o usuário chamou 'Acorda, Neo' ou pediu para parar durante a fala,
+        ou False se a reprodução terminou normalmente.
+        """
+        proc = tts.iniciar_reproducao(caminho_audio)
+        if proc is None:
+            return False
+
+        interrompido = False
         try:
-            GLib.idle_add(self.present)
-            GLib.idle_add(self._definir_status, "🎙️ Pode perguntar...", "escutando")
-            texto_usuario = self._capturar_pergunta()
+            while self._escutando and proc.poll() is None:
+                clipe = stt.gravar_clipe(DURACAO_CLIPE_INTERRUPCAO)
+                if proc.poll() is not None:
+                    # A fala terminou normalmente durante ou logo após a gravação
+                    if clipe:
+                        clipe.unlink(missing_ok=True)
+                    break
 
-            if not texto_usuario:
-                GLib.idle_add(self._definir_status, "Não entendi nada, diga \"Acorda, Neo\" de novo.", "escutando")
-                return
+                if clipe is None:
+                    time.sleep(0.1)
+                    continue
 
-            GLib.idle_add(self._adicionar_balao, texto_usuario, "usuario")
+                if stt.contem_palavra_ativacao(clipe, durante_fala=True):
+                    print("[window] ⚡ Interrupção por voz detectada! Parando fala do Neo...")
+                    tts.parar()
+                    interrompido = True
+                    break
+        finally:
+            tts.parar()
 
-            provedor = self._config.get("provedor", config.DEFAULT_PROVEDOR)
-            if provedor == config.PROVEDOR_OLLAMA:
-                modelo_nome = self._config.get("ollama_model", config.DEFAULT_OLLAMA_MODEL)
-                GLib.idle_add(self._definir_status, f"🤔 Pensando (Ollama • {modelo_nome})...", "pensando")
-                resposta = self._perguntar_ollama(texto_usuario)
-            else:
-                GLib.idle_add(self._definir_status, "🤔 Pensando (Claude)...", "pensando")
-                resposta = self._perguntar_claude(texto_usuario)
+        return interrompido
 
-            GLib.idle_add(self._adicionar_balao, resposta, "assistente")
-            GLib.idle_add(self._definir_status, "🗣️ Falando...", "falando")
+    def _processar_ciclo_pergunta(self):
+        while self._escutando:
+            try:
+                GLib.idle_add(self.present)
+                GLib.idle_add(self._definir_status, "🎙️ Pode perguntar...", "escutando")
+                texto_usuario = self._capturar_pergunta()
 
-            voz = self._config.get("voz", config.DEFAULT_VOICE)
-            caminho_audio = sintetizar(resposta, voz)
-            tocar(caminho_audio)
-        except Exception as exc:  # noqa: BLE001 - mostrar qualquer erro pro usuário
-            traceback.print_exc()
-            GLib.idle_add(self._definir_status, f"⚠️ Erro: {exc}")
+                if not texto_usuario:
+                    GLib.idle_add(self._definir_status, "Não entendi nada, diga \"Acorda, Neo\" de novo.", "escutando")
+                    break
+
+                GLib.idle_add(self._adicionar_balao, texto_usuario, "usuario")
+
+                provedor = self._config.get("provedor", config.DEFAULT_PROVEDOR)
+                if provedor == config.PROVEDOR_OLLAMA:
+                    modelo_nome = self._config.get("ollama_model", config.DEFAULT_OLLAMA_MODEL)
+                    GLib.idle_add(self._definir_status, f"🤔 Pensando (Ollama • {modelo_nome})...", "pensando")
+                    resposta = self._perguntar_ollama(texto_usuario)
+                else:
+                    GLib.idle_add(self._definir_status, "🤔 Pensando (Claude)...", "pensando")
+                    resposta = self._perguntar_claude(texto_usuario)
+
+                GLib.idle_add(self._adicionar_balao, resposta, "assistente")
+                GLib.idle_add(self._definir_status, "🗣️ Falando... (Diga \"Acorda, Neo\" para interromper)", "falando")
+
+                voz = self._config.get("voz", config.DEFAULT_VOICE)
+                caminho_audio = sintetizar(resposta, voz)
+                interrompido = self._reproduzir_resposta_com_interrupcao(caminho_audio)
+
+                if interrompido:
+                    GLib.idle_add(self._definir_status, "⚡ Interrompido! Ouvindo você...", "escutando")
+                    # Reinicia imediatamente o ciclo: escuta a nova pergunta sem precisar reativar!
+                    continue
+                else:
+                    break
+            except Exception as exc:  # noqa: BLE001 - mostrar qualquer erro pro usuário
+                traceback.print_exc()
+                GLib.idle_add(self._definir_status, f"⚠️ Erro: {exc}")
+                break
 
     def _perguntar_ollama(self, texto_usuario: str) -> str:
         host = self._config.get("ollama_host", config.DEFAULT_OLLAMA_HOST)

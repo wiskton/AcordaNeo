@@ -19,6 +19,7 @@ Este documento delineia a visão e o planejamento de evolução do **Acorda, Neo
 - [x] **Captura de frases completas:** Acumulação contínua de áudio e transcrição em passagem única.
 - [x] **Interface gráfica GTK3 com Tema Matrix:** Design cyberpunk com paleta verde fósforo (#00ff66), cabeçalho terminal, balões de conversa com tags e console de controle no rodapé.
 - [x] **Integração completa com Pop!_OS / COSMIC / GNOME:** Ícones em múltiplas resoluções, mapeamento de StartupWMClass e suporte a Wayland sem ícone genérico.
+- [x] **Interrupção de voz em tempo real (Barge-in):** Interrompe o áudio da fala instantaneamente se o usuário disser *"Acorda, Neo"* ou *"Pare"*, prestando atenção imediatamente na nova pergunta.
 
 ---
 

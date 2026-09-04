@@ -72,6 +72,7 @@ flowchart LR
 - 🖥️ **Integração Nativa com o Desktop Pop!_OS (COSMIC / GNOME):**
   - Ícone oficial do Neo integrado em alta resolução (16x16 até 512x512 + SVG), perfeitamente associado ao lançador, Dock, Alt-Tab e barra de janelas via `StartupWMClass`.
 - 🎙️ **Ativação por Voz (Hands-Free):** Fale *"Acorda, Neo"* de qualquer lugar da sala. Sem atalhos manuais ou cliques necessários.
+- ⚡ **Interrupção por Voz (Barge-in / Fala Interrompível):** Fale *"Acorda, Neo"* ou *"Pare"* a qualquer momento enquanto o assistente estiver respondendo para cortar o áudio instantaneamente e fazer uma nova pergunta sem precisar esperar.
 - 🔒 **Reconhecimento de Voz 100% Privativo (Local):** Processado localmente no processador via `faster-whisper`.
 - 🎚️ **Tratamento de Áudio & AGC Digital:**
   - Remoção automática de bias analógico (DC offset) que costuma estragar o reconhecimento em laptops.
