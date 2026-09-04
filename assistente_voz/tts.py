@@ -10,7 +10,7 @@ from pathlib import Path
 import edge_tts
 
 
-# Perfis de voz personalizados (ex: Neo / Matrix com tom e cadência ajustados)
+# Perfis de voz personalizados exclusivos do Neo (Matrix)
 PERFIS_VOZ = {
     "neo": {
         "voz": "pt-BR-AntonioNeural",
@@ -26,15 +26,11 @@ PERFIS_VOZ = {
 
 
 async def _sintetizar_async(texto: str, identificador_voz: str, destino: Path):
-    perfil = PERFIS_VOZ.get(identificador_voz)
-    if perfil:
-        voz_real = perfil["voz"]
-        pitch = perfil.get("pitch", "+0Hz")
-        rate = perfil.get("rate", "+0%")
-    else:
-        voz_real = identificador_voz
-        pitch = "+0Hz"
-        rate = "+0%"
+    perfil = PERFIS_VOZ.get(identificador_voz, PERFIS_VOZ["neo"])
+    voz_real = perfil["voz"]
+    pitch = perfil.get("pitch", "-20Hz")
+    rate = perfil.get("rate", "-7%")
+
 
     comunicador = edge_tts.Communicate(texto, voz_real, pitch=pitch, rate=rate)
     await comunicador.save(str(destino))

@@ -38,12 +38,6 @@ DEFAULT_MODEL = "claude-sonnet-4-5"
 VOZES_DISPONIVEIS = [
     ("neo", "🕶️ Neo (Matrix - Dublado PT-BR)"),
     ("neo-keanu", "🕶️ Neo (Keanu Reeves - Original)"),
-    ("pt-BR-AntonioNeural", "Antônio (PT-BR, padrão)"),
-    ("pt-BR-FranciscaNeural", "Francisca (PT-BR, feminina)"),
-    ("pt-BR-ThalitaNeural", "Thalita (PT-BR, feminina)"),
-    ("pt-PT-DuarteNeural", "Duarte (PT-PT, masculina)"),
-    ("en-US-GuyNeural", "Guy (EN-US, masculina)"),
-    ("en-US-JennyNeural", "Jenny (EN-US, feminina)"),
 ]
 
 
@@ -59,12 +53,15 @@ def _defaults():
 
 
 def carregar():
+    vozes_validas = {v[0] for v in VOZES_DISPONIVEIS}
     for arq in (CONFIG_FILE, CONFIG_DIR_LEGACY / "config.json"):
         if arq.exists():
             try:
                 dados = json.loads(arq.read_text(encoding="utf-8"))
                 base = _defaults()
                 base.update({k: v for k, v in dados.items() if v not in (None, "")})
+                if base.get("voz") not in vozes_validas:
+                    base["voz"] = DEFAULT_VOICE
                 return base
             except (json.JSONDecodeError, OSError):
                 pass

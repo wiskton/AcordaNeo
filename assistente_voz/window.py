@@ -281,11 +281,14 @@ class JanelaPrincipal(Gtk.Window):
         box.add(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
 
         # Voz
-        box.add(Gtk.Label(label="<b>Voz padrão:</b>", use_markup=True, xalign=0))
+        box.add(Gtk.Label(label="<b>Voz do Neo:</b>", use_markup=True, xalign=0))
         combo_voz = Gtk.ComboBoxText()
         for id_voz, nome in config.VOZES_DISPONIVEIS:
             combo_voz.append(id_voz, nome)
-        combo_voz.set_active_id(self._config.get("voz", config.DEFAULT_VOICE))
+        voz_atual = self._config.get("voz", config.DEFAULT_VOICE)
+        if voz_atual not in [v[0] for v in config.VOZES_DISPONIVEIS]:
+            voz_atual = config.DEFAULT_VOICE
+        combo_voz.set_active_id(voz_atual)
         box.add(combo_voz)
 
         if obrigatorio:
