@@ -2,6 +2,7 @@
 
 Sem botão de microfone — o app fica sempre ouvindo em segundo plano e só
 "acorda" quando reconhece a frase de ativação ("Acorda, Neo").
+Prioriza inteligência local 100% offline via Ollama, com Claude como opção.
 """
 
 import os
@@ -20,6 +21,7 @@ from gi.repository import GdkPixbuf, GLib, Gtk
 from . import config
 from . import stt
 from .claude_client import ClaudeClient
+from .ollama_client import OllamaClient, OllamaError
 from .tts import sintetizar, tocar
 
 ASSETS_DIR = Path(__file__).resolve().parent.parent / "assets"
@@ -35,7 +37,7 @@ MAX_SEGUNDOS_PERGUNTA = 25       # teto de segurança pra não gravar pra sempre
 class JanelaPrincipal(Gtk.Window):
     def __init__(self):
         super().__init__(title="Acorda, Neo")
-        self.set_default_size(440, 720)
+        self.set_default_size(460, 750)
         self.set_border_width(0)
 
         # Garante níveis saudáveis no microfone ALSA (sem saturação de boost)
@@ -43,13 +45,14 @@ class JanelaPrincipal(Gtk.Window):
 
         self._config = config.carregar()
         self._claude = None
+        self._ollama = None
         self._ocupado = False
         self._escutando = True
 
         self._montar_ui()
         self.connect("destroy", self._ao_fechar)
 
-        if not self._tem_chave_api():
+        if not self._tem_credenciais_ou_provedor_pronto():
             GLib.idle_add(self._abrir_preferencias, True)
 
         thread_escuta = threading.Thread(target=self._loop_escuta_continua, daemon=True)
@@ -60,7 +63,7 @@ class JanelaPrincipal(Gtk.Window):
     def _montar_ui(self):
         header = Gtk.HeaderBar(title="Acorda, Neo", show_close_button=True)
         botao_config = Gtk.Button.new_from_icon_name("preferences-system-symbolic", Gtk.IconSize.BUTTON)
-        botao_config.set_tooltip_text("Preferências (chave da API e voz)")
+        botao_config.set_tooltip_text("Preferências (IA, modelo e voz)")
         botao_config.connect("clicked", lambda *_a: self._abrir_preferencias(False))
         header.pack_end(botao_config)
         self.set_titlebar(header)
@@ -74,7 +77,7 @@ class JanelaPrincipal(Gtk.Window):
         raiz.pack_start(topo, False, False, 0)
 
         self._avatar_img = Gtk.Image()
-        self._carregar_avatar(180)
+        self._carregar_avatar(170)
         topo.pack_start(self._avatar_img, False, False, 0)
 
         self._status_label = Gtk.Label(label="👂 Diga \"Acorda, Neo\" pra começar.")
@@ -91,20 +94,44 @@ class JanelaPrincipal(Gtk.Window):
         scroll.add(self._chat_box)
         self._scroll_window = scroll
 
-        # --- Rodapé: seletor de voz --------------------------------------------
+        # --- Rodapé: seletores de Provedor, Modelo e Voz ------------------------
         rodape = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
-        rodape.set_border_width(16)
+        rodape.set_border_width(14)
         raiz.pack_start(rodape, False, False, 0)
 
-        rodape.pack_start(Gtk.Label(label="Voz das respostas:", xalign=0), False, False, 0)
+        # Seletor de Cérebro (IA)
+        linha_provedor = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        linha_provedor.pack_start(Gtk.Label(label="Cérebro da IA:", xalign=0), False, False, 0)
+        self._provedor_combo = Gtk.ComboBoxText()
+        for id_p, nome_p in config.PROVEDORES_DISPONIVEIS:
+            self._provedor_combo.append(id_p, nome_p)
+        self._provedor_combo.set_active_id(self._config.get("provedor", config.DEFAULT_PROVEDOR))
+        self._provedor_combo.connect("changed", self._on_trocar_provedor)
+        linha_provedor.pack_start(self._provedor_combo, True, True, 0)
+        rodape.pack_start(linha_provedor, False, False, 0)
 
+        # Seletor de Modelo Local Ollama
+        self._linha_modelo_ollama = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        self._linha_modelo_ollama.pack_start(Gtk.Label(label="Modelo Local:", xalign=0), False, False, 0)
+        self._modelo_ollama_combo = Gtk.ComboBoxText()
+        self._atualizar_modelos_ollama_combo()
+        self._modelo_ollama_combo.connect("changed", self._on_trocar_modelo_ollama)
+        self._linha_modelo_ollama.pack_start(self._modelo_ollama_combo, True, True, 0)
+        rodape.pack_start(self._linha_modelo_ollama, False, False, 0)
+
+        # Seletor de Voz
+        linha_voz = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        linha_voz.pack_start(Gtk.Label(label="Voz das respostas:", xalign=0), False, False, 0)
         self._voz_combo = Gtk.ComboBoxText()
         for id_voz, nome in config.VOZES_DISPONIVEIS:
             self._voz_combo.append(id_voz, nome)
         voz_atual = self._config.get("voz", config.DEFAULT_VOICE)
         self._voz_combo.set_active_id(voz_atual)
         self._voz_combo.connect("changed", self._on_trocar_voz)
-        rodape.pack_start(self._voz_combo, False, False, 0)
+        linha_voz.pack_start(self._voz_combo, True, True, 0)
+        rodape.pack_start(linha_voz, False, False, 0)
+
+        self._ajustar_visibilidade_modelo_ollama()
 
     def _carregar_avatar(self, tamanho: int):
         if AVATAR_PATH.exists():
@@ -114,6 +141,25 @@ class JanelaPrincipal(Gtk.Window):
             self._avatar_img.set_from_pixbuf(pixbuf)
         else:
             self._avatar_img.set_from_icon_name("avatar-default-symbolic", Gtk.IconSize.DIALOG)
+
+    def _ajustar_visibilidade_modelo_ollama(self):
+        provedor = self._config.get("provedor", config.DEFAULT_PROVEDOR)
+        self._linha_modelo_ollama.set_visible(provedor == config.PROVEDOR_OLLAMA)
+
+    def _atualizar_modelos_ollama_combo(self):
+        self._modelo_ollama_combo.remove_all()
+        client = OllamaClient(host=self._config.get("ollama_host", config.DEFAULT_OLLAMA_HOST))
+        modelos = client.listar_modelos()
+        if not modelos:
+            modelos = ["llama3.2:3b", "llama3.2", "qwen3:8b", "mistral"]
+        for m in modelos:
+            self._modelo_ollama_combo.append(m, m)
+
+        atual = self._config.get("ollama_model", config.DEFAULT_OLLAMA_MODEL)
+        if atual in modelos:
+            self._modelo_ollama_combo.set_active_id(atual)
+        else:
+            self._modelo_ollama_combo.set_active(0)
 
     # --------------------------------------------------------------- Chat UI
 
@@ -154,7 +200,38 @@ class JanelaPrincipal(Gtk.Window):
         box.set_border_width(16)
         box.set_spacing(10)
 
-        box.add(Gtk.Label(label="<b>Claude (API Anthropic)</b>", use_markup=True, xalign=0))
+        # Provedor
+        box.add(Gtk.Label(label="<b>Provedor Principal:</b>", use_markup=True, xalign=0))
+        combo_prov = Gtk.ComboBoxText()
+        for id_p, nome_p in config.PROVEDORES_DISPONIVEIS:
+            combo_prov.append(id_p, nome_p)
+        combo_prov.set_active_id(self._config.get("provedor", config.DEFAULT_PROVEDOR))
+        box.add(combo_prov)
+
+        box.add(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
+
+        # Ollama (Local)
+        box.add(Gtk.Label(label="<b>Ollama (100% Offline / Gratuito)</b>", use_markup=True, xalign=0))
+        box.add(Gtk.Label(label="Endereço do Servidor Ollama:", xalign=0))
+        entrada_ollama_host = Gtk.Entry()
+        entrada_ollama_host.set_text(self._config.get("ollama_host", config.DEFAULT_OLLAMA_HOST))
+        box.add(entrada_ollama_host)
+
+        box.add(Gtk.Label(label="Modelo Local do Ollama:", xalign=0))
+        entrada_ollama_model = Gtk.Entry()
+        entrada_ollama_model.set_text(self._config.get("ollama_model", config.DEFAULT_OLLAMA_MODEL))
+        box.add(entrada_ollama_model)
+
+        # Status Ollama
+        client_test = OllamaClient(host=entrada_ollama_host.get_text().strip())
+        online = client_test.testar_conexao()
+        status_txt = "🟢 Ollama conectado e ativo" if online else "🟡 Ollama não conectado (execute 'ollama serve')"
+        box.add(Gtk.Label(label=f"<small>{status_txt}</small>", use_markup=True, xalign=0))
+
+        box.add(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
+
+        # Claude (API)
+        box.add(Gtk.Label(label="<b>Claude (API Anthropic - Opcional)</b>", use_markup=True, xalign=0))
         box.add(Gtk.Label(label="Chave da API da Anthropic:", xalign=0))
         entrada_chave = Gtk.Entry()
         entrada_chave.set_visibility(False)
@@ -163,7 +240,9 @@ class JanelaPrincipal(Gtk.Window):
         box.add(entrada_chave)
 
         box.add(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
-        box.add(Gtk.Label(label="Voz padrão:", xalign=0))
+
+        # Voz
+        box.add(Gtk.Label(label="<b>Voz padrão:</b>", use_markup=True, xalign=0))
         combo_voz = Gtk.ComboBoxText()
         for id_voz, nome in config.VOZES_DISPONIVEIS:
             combo_voz.append(id_voz, nome)
@@ -172,7 +251,7 @@ class JanelaPrincipal(Gtk.Window):
 
         if obrigatorio:
             aviso = Gtk.Label(
-                label="Configure a chave da API da Claude (Anthropic) pra começar a usar o assistente."
+                label="Bem-vindo ao Acorda, Neo! Verifique as configurações para começar."
             )
             aviso.set_line_wrap(True)
             box.add(aviso)
@@ -181,17 +260,44 @@ class JanelaPrincipal(Gtk.Window):
         resposta = dialogo.run()
 
         if resposta == Gtk.ResponseType.OK:
+            self._config["provedor"] = combo_prov.get_active_id() or config.DEFAULT_PROVEDOR
+            self._config["ollama_host"] = entrada_ollama_host.get_text().strip() or config.DEFAULT_OLLAMA_HOST
+            self._config["ollama_model"] = entrada_ollama_model.get_text().strip() or config.DEFAULT_OLLAMA_MODEL
             self._config["anthropic_api_key"] = entrada_chave.get_text().strip()
             self._config["voz"] = combo_voz.get_active_id() or config.DEFAULT_VOICE
             config.salvar(self._config)
+
+            self._provedor_combo.set_active_id(self._config["provedor"])
+            self._atualizar_modelos_ollama_combo()
             self._voz_combo.set_active_id(self._config["voz"])
-            self._claude = None  # força recriar o cliente com a chave nova
+            self._ajustar_visibilidade_modelo_ollama()
+
+            self._claude = None
+            self._ollama = None
 
         dialogo.destroy()
         return False
 
-    def _tem_chave_api(self) -> bool:
+    def _tem_credenciais_ou_provedor_pronto(self) -> bool:
+        provedor = self._config.get("provedor", config.DEFAULT_PROVEDOR)
+        if provedor == config.PROVEDOR_OLLAMA:
+            # Ollama é local e gratuito, não requer chave prévia
+            return True
         return bool(self._config.get("anthropic_api_key"))
+
+    def _on_trocar_provedor(self, combo):
+        self._config["provedor"] = combo.get_active_id() or config.DEFAULT_PROVEDOR
+        config.salvar(self._config)
+        self._ajustar_visibilidade_modelo_ollama()
+        if self._config["provedor"] == config.PROVEDOR_CLAUDE and not self._config.get("anthropic_api_key"):
+            self._abrir_preferencias(True)
+
+    def _on_trocar_modelo_ollama(self, combo):
+        mod = combo.get_active_id()
+        if mod:
+            self._config["ollama_model"] = mod
+            config.salvar(self._config)
+            self._ollama = None
 
     def _on_trocar_voz(self, combo):
         self._config["voz"] = combo.get_active_id() or config.DEFAULT_VOICE
@@ -209,7 +315,7 @@ class JanelaPrincipal(Gtk.Window):
         processada ou a resposta está sendo falada, pra não se auto-escutar.
         """
         while self._escutando:
-            if self._ocupado or not self._tem_chave_api():
+            if self._ocupado or not self._tem_credenciais_ou_provedor_pronto():
                 time.sleep(0.2)
                 continue
 
@@ -221,8 +327,7 @@ class JanelaPrincipal(Gtk.Window):
                     break
 
                 if clipe is None:
-                    # Gravação falhou (mic ocupado, dispositivo indisponível...) —
-                    # espera um pouco antes de tentar de novo, sem girar sem parar.
+                    # Gravação falhou (mic ocupado, dispositivo indisponível...)
                     time.sleep(1.0)
                     continue
 
@@ -308,8 +413,15 @@ class JanelaPrincipal(Gtk.Window):
                 return
 
             GLib.idle_add(self._adicionar_balao, texto_usuario, "usuario")
-            GLib.idle_add(self._definir_status, "🤔 Pensando (Claude)...")
-            resposta = self._perguntar_claude(texto_usuario)
+
+            provedor = self._config.get("provedor", config.DEFAULT_PROVEDOR)
+            if provedor == config.PROVEDOR_OLLAMA:
+                modelo_nome = self._config.get("ollama_model", config.DEFAULT_OLLAMA_MODEL)
+                GLib.idle_add(self._definir_status, f"🤔 Pensando (Ollama • {modelo_nome})...")
+                resposta = self._perguntar_ollama(texto_usuario)
+            else:
+                GLib.idle_add(self._definir_status, "🤔 Pensando (Claude)...")
+                resposta = self._perguntar_claude(texto_usuario)
 
             GLib.idle_add(self._adicionar_balao, resposta, "assistente")
             GLib.idle_add(self._definir_status, "🗣️ Falando...")
@@ -320,6 +432,13 @@ class JanelaPrincipal(Gtk.Window):
         except Exception as exc:  # noqa: BLE001 - mostrar qualquer erro pro usuário
             traceback.print_exc()
             GLib.idle_add(self._definir_status, f"⚠️ Erro: {exc}")
+
+    def _perguntar_ollama(self, texto_usuario: str) -> str:
+        host = self._config.get("ollama_host", config.DEFAULT_OLLAMA_HOST)
+        model = self._config.get("ollama_model", config.DEFAULT_OLLAMA_MODEL)
+        if self._ollama is None or self._ollama.host != host or self._ollama.model != model:
+            self._ollama = OllamaClient(host=host, model=model)
+        return self._ollama.perguntar(texto_usuario)
 
     def _perguntar_claude(self, texto_usuario: str) -> str:
         if self._claude is None:

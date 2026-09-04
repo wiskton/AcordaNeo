@@ -20,6 +20,18 @@ else:
 
 CONFIG_FILE = CONFIG_DIR / "config.json"
 
+PROVEDOR_OLLAMA = "ollama"
+PROVEDOR_CLAUDE = "claude"
+DEFAULT_PROVEDOR = PROVEDOR_OLLAMA
+
+PROVEDORES_DISPONIVEIS = [
+    (PROVEDOR_OLLAMA, "Ollama (Local / 100% Offline / Gratuito)"),
+    (PROVEDOR_CLAUDE, "Claude (Anthropic API oficial)"),
+]
+
+DEFAULT_OLLAMA_HOST = "http://localhost:11434"
+DEFAULT_OLLAMA_MODEL = "llama3.2:3b"
+
 DEFAULT_VOICE = "neo"
 DEFAULT_MODEL = "claude-sonnet-4-5"
 
@@ -34,8 +46,12 @@ VOZES_DISPONIVEIS = [
     ("en-US-JennyNeural", "Jenny (EN-US, feminina)"),
 ]
 
+
 def _defaults():
     return {
+        "provedor": DEFAULT_PROVEDOR,
+        "ollama_host": DEFAULT_OLLAMA_HOST,
+        "ollama_model": DEFAULT_OLLAMA_MODEL,
         "anthropic_api_key": os.environ.get("ANTHROPIC_API_KEY", ""),
         "voz": DEFAULT_VOICE,
         "modelo": DEFAULT_MODEL,
