@@ -23,8 +23,8 @@ from .tts import sintetizar, tocar
 ASSETS_DIR = Path(__file__).resolve().parent.parent / "assets"
 AVATAR_PATH = ASSETS_DIR / "avatar.png"
 
-DURACAO_CLIPE_ATIVACAO = 3.0     # segundos por trecho enquanto espera "Acorda, Neo"
-DURACAO_CLIPE_PERGUNTA = 2.5     # segundos por trecho enquanto ouve a pergunta
+DURACAO_CLIPE_ATIVACAO = 3       # segundos por trecho enquanto espera "Acorda, Neo"
+DURACAO_CLIPE_PERGUNTA = 3       # segundos por trecho enquanto ouve a pergunta (arecord só aceita inteiro)
 TOLERANCIA_SILENCIO = 1          # nº de trechos vazios seguidos até considerar que a pergunta acabou
 MAX_SEGUNDOS_PERGUNTA = 20       # teto de segurança pra não gravar pra sempre
 

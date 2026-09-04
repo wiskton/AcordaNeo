@@ -50,8 +50,11 @@ def gravar_clipe(duracao_segundos: float) -> Optional[Path]:
     os.close(fd)
     destino = Path(caminho)
 
+    # `arecord -d` só aceita segundos inteiros — passar "3.0" faz ele
+    # rejeitar o argumento e a gravação falha sempre, silenciosamente.
+    duracao_inteira = max(1, round(duracao_segundos))
     resultado = subprocess.run(
-        ["arecord", "-f", "S16_LE", "-r", "16000", "-c", "1", "-d", str(duracao_segundos), str(destino)],
+        ["arecord", "-f", "S16_LE", "-r", "16000", "-c", "1", "-d", str(duracao_inteira), str(destino)],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.PIPE,
         text=True,
@@ -66,8 +69,12 @@ def gravar_clipe(duracao_segundos: float) -> Optional[Path]:
     return destino
 
 
-def _transcrever_com(modelo: WhisperModel, caminho_wav: Path, idioma: str = "pt") -> str:
-    segmentos, _info = modelo.transcribe(str(caminho_wav), language=idioma, vad_filter=True)
+def _transcrever_com(
+    modelo: WhisperModel, caminho_wav: Path, idioma: str = "pt", dica_vocabulario: str = None
+) -> str:
+    segmentos, _info = modelo.transcribe(
+        str(caminho_wav), language=idioma, vad_filter=True, initial_prompt=dica_vocabulario
+    )
     return " ".join(seg.text.strip() for seg in segmentos).strip()
 
 
@@ -81,10 +88,22 @@ def transcrever(caminho_wav: Optional[Path], idioma: str = "pt") -> str:
 
 
 def contem_palavra_ativacao(caminho_wav: Optional[Path], idioma: str = "pt") -> bool:
-    """Checa (com o modelo leve) se o trecho contém a palavra de ativação."""
+    """Checa (com o modelo leve) se o trecho contém a frase de ativação.
+
+    "Neo" é um nome curto e incomum em português — o Whisper às vezes ouve
+    coisas parecidas foneticamente (ex.: "acorda-lhe" em vez de "acorda,
+    neo"). Por isso: (1) damos uma dica de vocabulário via initial_prompt,
+    e (2) basta ouvir "acorda" OU "neo" pra disparar, não precisa das duas
+    exatas — reduz falso-negativo às custas de mais falso-positivo, troca
+    razoável pra um assistente pessoal.
+    """
     if caminho_wav is None:
         return False
-    texto = _transcrever_com(_get_modelo_ativacao(), caminho_wav, idioma)
+    texto = _transcrever_com(
+        _get_modelo_ativacao(), caminho_wav, idioma, dica_vocabulario="Acorda, Neo."
+    )
     caminho_wav.unlink(missing_ok=True)
-    texto_normalizado = texto.lower().replace(",", "").replace(".", "")
-    return PALAVRA_ATIVACAO in texto_normalizado.split()
+    print(f"[stt] ouvi: {texto!r}")
+    texto_normalizado = texto.lower().replace(",", "").replace(".", "").replace("-", " ")
+    palavras = texto_normalizado.split()
+    return "neo" in palavras or "acorda" in palavras
