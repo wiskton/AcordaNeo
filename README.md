@@ -45,15 +45,18 @@ Todo o reconhecimento de áudio (STT) e a inteligência do modelo de linguagem (
 flowchart LR
     Mic["🎙️ Microfone (ALSA/PipeWire)"] --> Pre["🛠️ Calibração + AGC + Remoção DC"]
     Pre --> Wake["👂 Escuta Contínua (Whisper Tiny)"]
-    Wake -- "Acorda, Neo!" --> Rec["🎙️ Gravação Contínua + Silero VAD"]
+    Wake -- "Acorda, Neo!" --> Pause["🎵 Pausa Spotify (MPRIS)"]
+    Pause --> Rec["🎙️ Gravação Contínua + Silero VAD"]
     Rec -- "Fim da fala" --> STT["📝 Transcrição Única (Whisper Small)"]
-    STT --> LLM{"🧠 Cérebro da IA"}
+    STT --> LLM{"🧠 Cérebro da IA (Multi-turn)"}
     LLM -- "Padrão (100% Offline)" --> Ollama["🖥️ Ollama Local (Llama 3.2 / Qwen)"]
     LLM -- "Opcional (Nuvem)" --> Claude["☁️ Claude 3.5 Sonnet (API)"]
-    Ollama --> TTS["🗣️ Síntese Neural (edge-tts / Voz do Neo)"]
+    Ollama --> TTS["🗣️ Síntese Neural (Voz do Neo)"]
     Claude --> TTS
     TTS --> Play["🔊 Reprodução de Áudio (ffplay)"]
-    Play --> Wake
+    Play -- "Barge-in ('Acorda, Neo' / 'Pare')" --> Rec
+    Play -- "Fim da fala" --> Resume["🎵 Retoma Spotify (MPRIS)"]
+    Resume --> Wake
 ```
 
 ---
@@ -92,10 +95,12 @@ flowchart LR
 | **Interface Gráfica** | GTK3 (PyGObject) | Janela principal, histórico estilo chat e painel de preferências |
 | **Cérebro Principal (Local)** | [Ollama](https://ollama.com/) (`llama3.2`, `qwen3`, etc.) | Processamento 100% offline, gratuito e sem telemetria |
 | **Cérebro Secundário (Nuvem)** | Anthropic Claude API (`claude-sonnet-4-5`) | Respostas de alta complexidade quando conectado à internet |
+| **Memória Conversacional** | Multi-turn Session Manager | Mantém contexto entre perguntas em ambos os provedores |
+| **Controle de Mídia** | MPRIS D-Bus / `playerctl` | Pausa automática do Spotify ao conversar e comandos de áudio |
 | **STT (Ativação)** | `faster-whisper` (`tiny`) | Detecção rápida da palavra-chave com baixíssimo uso de CPU |
 | **STT (Pergunta)** | `faster-whisper` (`small`) | Transcrição de alta precisão em língua portuguesa |
 | **VAD** | Silero VAD | Identificação precisa de presença de fala e cortes de silêncio |
-| **TTS** | `edge-tts` | Síntese de voz neural calibrada para o tom do Neo |
+| **TTS & Barge-in** | `edge-tts` / `ffplay` | Síntese neural calibrada do Neo com interrupção instantânea |
 | **Áudio do Sistema** | `arecord` / `ffplay` | Gravação e reprodução direta com drivers ALSA/PipeWire |
 
 ---
@@ -179,16 +184,53 @@ update-desktop-database ~/.local/share/applications/
 
 ---
 
+## 🎵 Controle de Mídia & Spotify (MPRIS)
+
+O **Acorda, Neo** integra-se diretamente com o barramento D-Bus do Linux (`org.mpris.MediaPlayer2`) e com o utilitário `playerctl` para gerenciar seus reprodutores de mídia (**Spotify**, VLC, navegadores, Amberol, etc.):
+
+- **Pausa Automática ao Conversar:** Assim que você diz *"Acorda, Neo"*, o player ativo é pausado imediatamente, garantindo silêncio no ambiente para que o microfone capture sua pergunta com máxima fidelidade.
+- **Retomada Inteligente:** Quando a resposta do Neo termina, a música volta a tocar automaticamente. Se o Spotify já estava pausado por você antes de falar, ele **não** é despausado indevidamente.
+- **Comandos de Voz de Mídia:**
+  - ⏸️ *"Acorda, Neo, pausa a música"* / *"Pausar Spotify"*
+  - ▶️ *"Acorda, Neo, continua a música"* / *"Tocar música"*
+  - ⏭️ *"Acorda, Neo, próxima música"* / *"Pula a música"*
+  - ⏮️ *"Acorda, Neo, música anterior"* / *"Volta a música"*
+  - ℹ️ *"Acorda, Neo, que música está tocando?"* (informa o título da faixa e artista)
+
+---
+
+## 🧠 Memória Contextual Multi-turn
+
+O assistente possui memória de diálogo contextual contínua de até 20 mensagens (10 turnos completos):
+
+- **Diálogos Encadeados:** Pergunte *"Quem dirigiu Matrix?"* e, em seguida, *"E quais outros filmes elas fizeram?"* — o Neo mantém o contexto entre as perguntas.
+- **Persistência Entre Provedores:** A memória é compartilhada; você pode começar uma conversa no **Ollama (local)** e alternar para a **Claude (nuvem)** sem perder o contexto.
+- **Como Limpar o Histórico:**
+  - **Por Voz:** Diga *"Acorda, Neo, limpar conversa"* (ou *"limpar histórico"*, *"novo chat"*, *"esquecer conversa"*).
+  - **Pela Interface:** Clique no botão com ícone de limpeza (`edit-clear-all-symbolic`) no cabeçalho da janela para iniciar uma nova conversa.
+
+---
+
+## ⚡ Interrupção por Voz em Tempo Real (Barge-in)
+
+Não é necessário esperar o assistente terminar de falar respostas longas:
+- Enquanto o Neo estiver falando, basta dizer **"Acorda, Neo"** (ou *"Pare"*, *"Para"*, *"Silêncio"*).
+- O áudio é cortado **instantaneamente** e o microfone entra imediatamente em modo de escuta para capturar sua nova pergunta.
+
+---
+
 ## 🗺️ Roadmap
 
 - [x] Detecção contínua hands-free e normalização de áudio com VAD
 - [x] Suporte a modelos locais via Ollama (100% offline e gratuito)
 - [x] Vozes calibradas do Neo (Matrix PT-BR e Keanu Reeves)
 - [x] Ícone na bandeja do sistema (System Tray / StatusNotifierItem)
+- [x] Interrupção por voz em tempo real (Barge-in / Fala Interrompível)
+- [x] Memória de contexto multi-turn na conversa
+- [x] Controle de mídia MPRIS (pausar Spotify ao conversar)
+- [x] Botão para limpar a conversa no cabeçalho e comando de voz
 - [ ] Indicadores sonoros (chimes de despertar e finalização)
 - [ ] Atalho global no teclado (Push-to-Talk)
-- [ ] Memória de contexto multi-turn na conversa
-- [ ] Controle de mídia MPRIS (pausar Spotify ao conversar)
 
 Confira os detalhes completos no documento **[ROADMAP.md](ROADMAP.md)**.
 
