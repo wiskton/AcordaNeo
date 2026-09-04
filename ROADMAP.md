@@ -26,12 +26,14 @@ Este documento delineia a visão e o planejamento de evolução do **Acorda, Neo
 ### 📌 Fase 1: Experiência Desktop e Feedback Sonoro
 *Foco: Usabilidade e integração nativa com o ambiente de trabalho.*
 
+- [x] **Ícone na bandeja do sistema (System Tray / StatusNotifierItem):**
+  - Integração nativa com COSMIC/Wayland, GNOME Shell e KDE via DBus StatusNotifierItem e DBusMenu.
+  - Minimiza para a bandeja ao fechar a janela (`X`) para continuar escutando em segundo plano.
+  - Menu com ações rápidas (Mostrar / Ocultar, Preferências, Sair).
+  - Ícone dinâmico refletindo o estado atual (Ouvindo / Pensando / Falando).
 - [ ] **Indicadores sonoros (Chimes):**
   - Som sutil ao reconhecer *"Acorda, Neo"* (feedback de que o assistente acordou).
   - Som discreto ao finalizar a escuta e iniciar o pensamento.
-- [ ] **Ícone na bandeja do sistema (System Tray / AppIndicator):**
-  - Indicador de estado (Ouvindo / Pensando / Falando / Silenciado).
-  - Menu rápido para pausar/retomar escuta, alternar modelo ou abrir preferências.
 - [ ] **Atalho global de teclado (Push-to-Talk / Hotkey):**
   - Tecla de atalho (ex.: `Super + Espaço` ou configurável) para ativar mesmo sem falar o gatilho.
 - [ ] **Histórico e rolagem aprimorados:**

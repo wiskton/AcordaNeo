@@ -22,6 +22,7 @@ from . import config
 from . import stt
 from .claude_client import ClaudeClient
 from .ollama_client import OllamaClient, OllamaError
+from .tray import TrayManager
 from .tts import sintetizar, tocar
 
 ASSETS_DIR = Path(__file__).resolve().parent.parent / "assets"
@@ -50,7 +51,16 @@ class JanelaPrincipal(Gtk.Window):
         self._escutando = True
 
         self._montar_ui()
+        self.connect("delete-event", self._ao_deletar_janela)
         self.connect("destroy", self._ao_fechar)
+
+        # Inicializa o ícone da bandeja do sistema (System Tray)
+        self._tray = TrayManager(
+            ao_alternar_janela=self._alternar_visibilidade_janela,
+            ao_abrir_preferencias=lambda: self._abrir_preferencias(False),
+            ao_sair=self._sair_aplicativo,
+            icone_path=AVATAR_PATH,
+        )
 
         if not self._tem_credenciais_ou_provedor_pronto():
             GLib.idle_add(self._abrir_preferencias, True)
@@ -187,8 +197,10 @@ class JanelaPrincipal(Gtk.Window):
         GLib.idle_add(lambda: adj.set_value(adj.get_upper()))
         return False
 
-    def _definir_status(self, texto: str):
+    def _definir_status(self, texto: str, estado: str = "escutando"):
         self._status_label.set_text(texto)
+        if hasattr(self, "_tray") and self._tray:
+            self._tray.definir_status(texto, estado)
         return False
 
     # ------------------------------------------------------------ Preferências
@@ -305,9 +317,23 @@ class JanelaPrincipal(Gtk.Window):
 
     # ---------------------------------------------------------- Escuta contínua
 
-    def _ao_fechar(self, *_args):
+    def _ao_deletar_janela(self, widget, event):
+        """Oculta a janela em vez de encerrar a aplicação para continuar escutando na bandeja."""
+        self.hide()
+        return True
+
+    def _alternar_visibilidade_janela(self):
+        if self.is_visible():
+            self.hide()
+        else:
+            self.present()
+
+    def _sair_aplicativo(self):
         self._escutando = False
         Gtk.main_quit()
+
+    def _ao_fechar(self, *_args):
+        self._sair_aplicativo()
 
     def _loop_escuta_continua(self):
         """Roda pra sempre numa thread separada: grava trechos curtos e checa se
@@ -405,11 +431,12 @@ class JanelaPrincipal(Gtk.Window):
 
     def _processar_ciclo_pergunta(self):
         try:
-            GLib.idle_add(self._definir_status, "🎙️ Pode perguntar...")
+            GLib.idle_add(self.present)
+            GLib.idle_add(self._definir_status, "🎙️ Pode perguntar...", "escutando")
             texto_usuario = self._capturar_pergunta()
 
             if not texto_usuario:
-                GLib.idle_add(self._definir_status, "Não entendi nada, diga \"Acorda, Neo\" de novo.")
+                GLib.idle_add(self._definir_status, "Não entendi nada, diga \"Acorda, Neo\" de novo.", "escutando")
                 return
 
             GLib.idle_add(self._adicionar_balao, texto_usuario, "usuario")
@@ -417,14 +444,14 @@ class JanelaPrincipal(Gtk.Window):
             provedor = self._config.get("provedor", config.DEFAULT_PROVEDOR)
             if provedor == config.PROVEDOR_OLLAMA:
                 modelo_nome = self._config.get("ollama_model", config.DEFAULT_OLLAMA_MODEL)
-                GLib.idle_add(self._definir_status, f"🤔 Pensando (Ollama • {modelo_nome})...")
+                GLib.idle_add(self._definir_status, f"🤔 Pensando (Ollama • {modelo_nome})...", "pensando")
                 resposta = self._perguntar_ollama(texto_usuario)
             else:
-                GLib.idle_add(self._definir_status, "🤔 Pensando (Claude)...")
+                GLib.idle_add(self._definir_status, "🤔 Pensando (Claude)...", "pensando")
                 resposta = self._perguntar_claude(texto_usuario)
 
             GLib.idle_add(self._adicionar_balao, resposta, "assistente")
-            GLib.idle_add(self._definir_status, "🗣️ Falando...")
+            GLib.idle_add(self._definir_status, "🗣️ Falando...", "falando")
 
             voz = self._config.get("voz", config.DEFAULT_VOICE)
             caminho_audio = sintetizar(resposta, voz)

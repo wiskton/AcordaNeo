@@ -175,8 +175,8 @@ update-desktop-database ~/.local/share/applications/
 - [x] Detecção contínua hands-free e normalização de áudio com VAD
 - [x] Suporte a modelos locais via Ollama (100% offline e gratuito)
 - [x] Vozes calibradas do Neo (Matrix PT-BR e Keanu Reeves)
+- [x] Ícone na bandeja do sistema (System Tray / StatusNotifierItem)
 - [ ] Indicadores sonoros (chimes de despertar e finalização)
-- [ ] Ícone na bandeja do sistema (System Tray)
 - [ ] Atalho global no teclado (Push-to-Talk)
 - [ ] Memória de contexto multi-turn na conversa
 - [ ] Controle de mídia MPRIS (pausar Spotify ao conversar)
