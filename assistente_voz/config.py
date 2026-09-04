@@ -20,11 +20,13 @@ else:
 
 CONFIG_FILE = CONFIG_DIR / "config.json"
 
-DEFAULT_VOICE = "pt-BR-AntonioNeural"
+DEFAULT_VOICE = "neo"
 DEFAULT_MODEL = "claude-sonnet-4-5"
 
 VOZES_DISPONIVEIS = [
-    ("pt-BR-AntonioNeural", "Antônio (PT-BR, masculina)"),
+    ("neo", "🕶️ Neo (Matrix - Dublado PT-BR)"),
+    ("neo-keanu", "🕶️ Neo (Keanu Reeves - Original)"),
+    ("pt-BR-AntonioNeural", "Antônio (PT-BR, padrão)"),
     ("pt-BR-FranciscaNeural", "Francisca (PT-BR, feminina)"),
     ("pt-BR-ThalitaNeural", "Thalita (PT-BR, feminina)"),
     ("pt-PT-DuarteNeural", "Duarte (PT-PT, masculina)"),

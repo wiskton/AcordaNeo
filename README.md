@@ -137,9 +137,11 @@ update-desktop-database ~/.local/share/applications/
 
 ## 🗣️ Vozes Disponíveis
 
-| Identificador | Nome de Exibição | Idioma / Gênero |
+| Identificador | Nome de Exibição | Estilo / Idioma |
 |---|---|---|
-| `pt-BR-AntonioNeural` | Antônio | Português (Brasil) - Masculino |
+| `neo` | 🕶️ Neo (Matrix - Dublado PT-BR) | Calmo, grave e cadenciado (estilo dublagem) |
+| `neo-keanu` | 🕶️ Neo (Keanu Reeves - Original) | Tom introspectivo, voz original Keanu Reeves |
+| `pt-BR-AntonioNeural` | Antônio | Português (Brasil) - Masculino padrão |
 | `pt-BR-FranciscaNeural` | Francisca | Português (Brasil) - Feminino |
 | `pt-BR-ThalitaNeural` | Thalita | Português (Brasil) - Feminino |
 | `pt-PT-DuarteNeural` | Duarte | Português (Portugal) - Masculino |
