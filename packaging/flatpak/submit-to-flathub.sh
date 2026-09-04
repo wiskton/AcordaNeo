@@ -50,6 +50,8 @@ echo ""
 echo "======================================================================"
 echo "🎉 Branch enviada com sucesso para o seu GitHub!"
 echo ""
-echo "👉 Clique no link abaixo para abrir o Pull Request oficial no Flathub:"
+echo "👉 Clique no link abaixo (ou no seu navegador que foi aberto) para abrir o PR oficial:"
 echo "   🔗 https://github.com/flathub/flathub/compare/master...wiskton:flathub:${BRANCH_NAME}?expand=1"
 echo "======================================================================"
+
+xdg-open "https://github.com/flathub/flathub/compare/master...wiskton:flathub:${BRANCH_NAME}?expand=1" >/dev/null 2>&1 || true
