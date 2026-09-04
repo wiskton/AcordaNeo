@@ -7,6 +7,7 @@ Uso: python3 main.py  (ou ./run.sh, que cria a venv e instala tudo sozinho)
 import gi
 
 gi.require_version("Gtk", "3.0")
+gi.require_version("Gdk", "3.0")
 from gi.repository import Gdk, Gtk
 
 from assistente_voz.window import JanelaPrincipal
