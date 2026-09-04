@@ -10,6 +10,7 @@ import tempfile
 import threading
 import time
 import traceback
+import unicodedata
 from pathlib import Path
 
 import gi
@@ -19,6 +20,7 @@ gi.require_version("GdkPixbuf", "2.0")
 from gi.repository import GdkPixbuf, GLib, Gtk
 
 from . import config
+from . import mpris
 from . import stt
 from . import tts
 from .claude_client import ClaudeClient
@@ -58,6 +60,7 @@ class JanelaPrincipal(Gtk.Window):
         self._ollama = None
         self._ocupado = False
         self._escutando = True
+        self._historico = []
 
         self._montar_ui()
         self.connect("delete-event", self._ao_deletar_janela)
@@ -81,10 +84,17 @@ class JanelaPrincipal(Gtk.Window):
 
     def _montar_ui(self):
         header = Gtk.HeaderBar(title="Acorda, Neo", show_close_button=True)
+
         botao_config = Gtk.Button.new_from_icon_name("preferences-system-symbolic", Gtk.IconSize.BUTTON)
         botao_config.set_tooltip_text("Configurações (Cérebro, Modelo e Voz)")
         botao_config.connect("clicked", lambda *_a: self._abrir_preferencias(False))
         header.pack_end(botao_config)
+
+        botao_limpar = Gtk.Button.new_from_icon_name("edit-clear-all-symbolic", Gtk.IconSize.BUTTON)
+        botao_limpar.set_tooltip_text("Limpar histórico da conversa (Novo chat)")
+        botao_limpar.connect("clicked", lambda *_a: self._limpar_historico_ui())
+        header.pack_end(botao_limpar)
+
         self.set_titlebar(header)
         self._header = header
         self._atualizar_subtitulo_header()
@@ -308,6 +318,7 @@ class JanelaPrincipal(Gtk.Window):
     def _sair_aplicativo(self):
         self._escutando = False
         tts.parar()
+        mpris.retomar_apos_conversa()
         if hasattr(self, "_tray") and self._tray:
             self._tray.destruir()
         Gtk.main_quit()
@@ -443,52 +454,118 @@ class JanelaPrincipal(Gtk.Window):
 
         return interrompido
 
+    def _checar_comando_limpar_conversa(self, texto: str) -> bool:
+        sem_acentos = "".join(c for c in unicodedata.normalize("NFD", texto) if unicodedata.category(c) != "Mn")
+        t = (
+            sem_acentos.lower()
+            .replace(",", " ")
+            .replace(".", " ")
+            .replace("!", " ")
+            .replace("?", " ")
+            .strip()
+        )
+        gatilhos = [
+            "limpar conversa", "limpar historico", "limpe a conversa",
+            "esquecer conversa", "esqueca a conversa", "esqueca tudo",
+            "novo chat", "nova conversa", "reiniciar conversa", "limpar memoria",
+            "apagar conversa", "apagar historico"
+        ]
+        return any(g in t for g in gatilhos)
+
+    def _limpar_historico_conversa(self):
+        self._historico.clear()
+        if self._ollama:
+            self._ollama.limpar_historico()
+        if self._claude:
+            self._claude.limpar_historico()
+
+    def _limpar_historico_ui(self):
+        self._limpar_historico_conversa()
+        for child in self._chat_box.get_children():
+            self._chat_box.remove(child)
+        self._definir_status("[ SYSTEM ONLINE ]  Diga \"Acorda, Neo\"")
+
     def _processar_ciclo_pergunta(self):
-        while self._escutando:
-            try:
-                GLib.idle_add(self.present)
-                GLib.idle_add(self._definir_status, "🎙️ Pode perguntar...", "escutando")
-                texto_usuario = self._capturar_pergunta()
+        try:
+            # 1. Pausa o Spotify / reprodutores de mídia ativos para não competir com o microfone
+            mpris.pausar_para_conversa()
 
-                if not texto_usuario:
-                    GLib.idle_add(self._definir_status, "Não entendi nada, diga \"Acorda, Neo\" de novo.", "escutando")
+            while self._escutando:
+                try:
+                    GLib.idle_add(self.present)
+                    GLib.idle_add(self._definir_status, "🎙️ Pode perguntar...", "escutando")
+                    texto_usuario = self._capturar_pergunta()
+
+                    if not texto_usuario:
+                        GLib.idle_add(self._definir_status, "Não entendi nada, diga \"Acorda, Neo\" de novo.", "escutando")
+                        break
+
+                    GLib.idle_add(self._adicionar_balao, texto_usuario, "usuario")
+
+                    # 2. Comando de voz para limpar memória / novo chat
+                    if self._checar_comando_limpar_conversa(texto_usuario):
+                        self._limpar_historico_conversa()
+                        resposta = "Histórico de conversa apagado. Memória reiniciada, Neo."
+                        GLib.idle_add(self._adicionar_balao, resposta, "assistente")
+                        GLib.idle_add(self._definir_status, "🗣️ Falando...", "falando")
+                        voz = self._config.get("voz", config.DEFAULT_VOICE)
+                        caminho_audio = sintetizar(resposta, voz)
+                        self._reproduzir_resposta_com_interrupcao(caminho_audio)
+                        break
+
+                    # 3. Comandos de voz de mídia MPRIS (pausar, tocar, próxima música...)
+                    reconhecido_midia, msg_midia = mpris.executar_comando_midia(texto_usuario)
+                    if reconhecido_midia:
+                        GLib.idle_add(self._adicionar_balao, msg_midia, "assistente")
+                        GLib.idle_add(self._definir_status, "🗣️ Falando...", "falando")
+                        voz = self._config.get("voz", config.DEFAULT_VOICE)
+                        caminho_audio = sintetizar(msg_midia, voz)
+                        self._reproduzir_resposta_com_interrupcao(caminho_audio)
+                        break
+
+                    # 4. Consulta ao cérebro da IA (mantendo memória multi-turn na conversa)
+                    provedor = self._config.get("provedor", config.DEFAULT_PROVEDOR)
+                    if provedor == config.PROVEDOR_OLLAMA:
+                        modelo_nome = self._config.get("ollama_model", config.DEFAULT_OLLAMA_MODEL)
+                        GLib.idle_add(self._definir_status, f"🤔 Pensando (Ollama • {modelo_nome})...", "pensando")
+                        resposta = self._perguntar_ollama(texto_usuario)
+                    else:
+                        GLib.idle_add(self._definir_status, "🤔 Pensando (Claude)...", "pensando")
+                        resposta = self._perguntar_claude(texto_usuario)
+
+                    # Registra a troca no histórico da conversa multi-turn
+                    self._historico.append({"role": "user", "content": texto_usuario})
+                    self._historico.append({"role": "assistant", "content": resposta})
+                    if len(self._historico) > 20:
+                        self._historico = self._historico[-20:]
+
+                    GLib.idle_add(self._adicionar_balao, resposta, "assistente")
+                    GLib.idle_add(self._definir_status, "🗣️ Falando... (Diga \"Acorda, Neo\" para interromper)", "falando")
+
+                    voz = self._config.get("voz", config.DEFAULT_VOICE)
+                    caminho_audio = sintetizar(resposta, voz)
+                    interrompido = self._reproduzir_resposta_com_interrupcao(caminho_audio)
+
+                    if interrompido:
+                        GLib.idle_add(self._definir_status, "⚡ Interrompido! Ouvindo você...", "escutando")
+                        # Continua o loop de escuta com o Spotify ainda pausado
+                        continue
+                    else:
+                        break
+                except Exception as exc:  # noqa: BLE001 - mostrar qualquer erro pro usuário
+                    traceback.print_exc()
+                    GLib.idle_add(self._definir_status, f"⚠️ Erro: {exc}")
                     break
-
-                GLib.idle_add(self._adicionar_balao, texto_usuario, "usuario")
-
-                provedor = self._config.get("provedor", config.DEFAULT_PROVEDOR)
-                if provedor == config.PROVEDOR_OLLAMA:
-                    modelo_nome = self._config.get("ollama_model", config.DEFAULT_OLLAMA_MODEL)
-                    GLib.idle_add(self._definir_status, f"🤔 Pensando (Ollama • {modelo_nome})...", "pensando")
-                    resposta = self._perguntar_ollama(texto_usuario)
-                else:
-                    GLib.idle_add(self._definir_status, "🤔 Pensando (Claude)...", "pensando")
-                    resposta = self._perguntar_claude(texto_usuario)
-
-                GLib.idle_add(self._adicionar_balao, resposta, "assistente")
-                GLib.idle_add(self._definir_status, "🗣️ Falando... (Diga \"Acorda, Neo\" para interromper)", "falando")
-
-                voz = self._config.get("voz", config.DEFAULT_VOICE)
-                caminho_audio = sintetizar(resposta, voz)
-                interrompido = self._reproduzir_resposta_com_interrupcao(caminho_audio)
-
-                if interrompido:
-                    GLib.idle_add(self._definir_status, "⚡ Interrompido! Ouvindo você...", "escutando")
-                    # Reinicia imediatamente o ciclo: escuta a nova pergunta sem precisar reativar!
-                    continue
-                else:
-                    break
-            except Exception as exc:  # noqa: BLE001 - mostrar qualquer erro pro usuário
-                traceback.print_exc()
-                GLib.idle_add(self._definir_status, f"⚠️ Erro: {exc}")
-                break
+        finally:
+            # 5. Retoma automaticamente a mídia pausada quando a conversa termina
+            mpris.retomar_apos_conversa()
 
     def _perguntar_ollama(self, texto_usuario: str) -> str:
         host = self._config.get("ollama_host", config.DEFAULT_OLLAMA_HOST)
         model = self._config.get("ollama_model", config.DEFAULT_OLLAMA_MODEL)
         if self._ollama is None or self._ollama.host != host or self._ollama.model != model:
             self._ollama = OllamaClient(host=host, model=model)
-        return self._ollama.perguntar(texto_usuario)
+        return self._ollama.perguntar(texto_usuario, historico=self._historico)
 
     def _perguntar_claude(self, texto_usuario: str) -> str:
         if self._claude is None:
@@ -496,4 +573,4 @@ class JanelaPrincipal(Gtk.Window):
                 api_key=self._config.get("anthropic_api_key", ""),
                 model=self._config.get("modelo", config.DEFAULT_MODEL),
             )
-        return self._claude.perguntar(texto_usuario)
+        return self._claude.perguntar(texto_usuario, historico=self._historico)

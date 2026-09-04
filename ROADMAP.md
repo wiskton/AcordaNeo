@@ -40,15 +40,16 @@ Este documento delineia a visão e o planejamento de evolução do **Acorda, Neo
   - Tecla de atalho (ex.: `Super + Espaço` ou configurável) para ativar mesmo sem falar o gatilho.
 - [ ] **Histórico e rolagem aprimorados:**
   - Exportação da conversa em Markdown.
-  - Botão para limpar a conversa atual.
+  - [x] Botão para limpar a conversa atual no cabeçalho e comando de voz.
 
 ---
 
 ### 📌 Fase 2: Inteligência e Memória Conversacional
 *Foco: Conversas naturais com contexto e personalização do modelo.*
 
-- [ ] **Memória contextual multi-turn:**
-  - Manter o histórico da sessão para perguntas de acompanhamento (*"Quem pintou a Mona Lisa?"* -> *"E onde ele nasceu?"*).
+- [x] **Memória contextual multi-turn:**
+  - Manter o histórico da sessão para perguntas de acompanhamento (*"Quem dirigiu Matrix?"* -> *"E quais outros filmes elas fizeram?"*).
+  - Contexto unificado e persistente entre Ollama e Claude.
 - [ ] **Personalização do Prompt de Sistema:**
   - Campo nas preferências para personalizar instruções à IA (tom de voz, brevidade, estilo conciso).
 - [ ] **Download de novos modelos direto da interface:**
@@ -59,8 +60,9 @@ Este documento delineia a visão e o planejamento de evolução do **Acorda, Neo
 ### 📌 Fase 3: Automação do Sistema e Ações no Linux
 *Foco: Controlar o computador usando a voz.*
 
-- [ ] **Integração MPRIS2 (Controle de Mídia):**
-  - Pausar Spotify / reprodutor de música automaticamente enquanto o usuário fala e enquanto a IA responde, retomando em seguida.
+- [x] **Integração MPRIS2 (Controle de Mídia):**
+  - Pausar Spotify / reprodutor de música automaticamente enquanto o usuário fala e enquanto a IA responde, retomando apenas os players pausados ao finalizar.
+  - Comandos diretos de voz para pausar, retomar, próxima e anterior.
 - [ ] **Comandos de sistema e Ferramentas (Tool Calling):**
   - Controle de volume (*"aumentar volume em 20%"*).
   - Abrir aplicativos (*"abrir o navegador"*, *"abrir o terminal"*).

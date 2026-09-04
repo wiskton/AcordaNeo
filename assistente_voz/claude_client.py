@@ -23,19 +23,20 @@ class ClaudeClient:
         self._model = model
         self._historico = []
 
-    def perguntar(self, pergunta: str) -> str:
+    def perguntar(self, pergunta: str, historico: list = None) -> str:
         """Envia a pergunta (com o histórico da conversa) e devolve a resposta em texto."""
-        self._historico.append({"role": "user", "content": pergunta})
+        mensagens = list(historico) if historico is not None else list(self._historico)
+        mensagens.append({"role": "user", "content": pergunta})
 
         resposta = self._client.messages.create(
             model=self._model,
             max_tokens=1024,
             system=SYSTEM_PROMPT,
-            messages=self._historico,
+            messages=mensagens,
         )
 
         texto = "".join(bloco.text for bloco in resposta.content if bloco.type == "text").strip()
-        self._historico.append({"role": "assistant", "content": texto})
+        self._historico = mensagens + [{"role": "assistant", "content": texto}]
 
         # Mantém só as últimas ~10 trocas pra não deixar o contexto (e o custo) crescer sem limite
         if len(self._historico) > 20:
@@ -45,3 +46,4 @@ class ClaudeClient:
 
     def limpar_historico(self):
         self._historico = []
+

@@ -50,11 +50,14 @@ class OllamaClient:
         except Exception:
             return []
 
-    def perguntar(self, pergunta: str) -> str:
+    def perguntar(self, pergunta: str, historico: list = None) -> str:
         """Envia a pergunta ao modelo local do Ollama mantendo o histórico de conversa."""
-        self._historico.append({"role": "user", "content": pergunta})
-
-        mensagens = [{"role": "system", "content": SYSTEM_PROMPT}] + self._historico
+        mensagens_historico = list(historico) if historico is not None else list(self._historico)
+        mensagens = (
+            [{"role": "system", "content": SYSTEM_PROMPT}]
+            + mensagens_historico
+            + [{"role": "user", "content": pergunta}]
+        )
 
         payload = {
             "model": self.model,
@@ -85,7 +88,10 @@ class OllamaClient:
             if "<think>" in texto and "</think>" in texto:
                 texto = re.sub(r"<think>.*?</think>", "", texto, flags=re.DOTALL).strip()
 
-            self._historico.append({"role": "assistant", "content": texto})
+            self._historico = mensagens_historico + [
+                {"role": "user", "content": pergunta},
+                {"role": "assistant", "content": texto},
+            ]
 
             if len(self._historico) > 20:
                 self._historico = self._historico[-20:]

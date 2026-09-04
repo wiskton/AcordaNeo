@@ -73,6 +73,8 @@ flowchart LR
   - Ícone oficial do Neo integrado em alta resolução (16x16 até 512x512 + SVG), perfeitamente associado ao lançador, Dock, Alt-Tab e barra de janelas via `StartupWMClass`.
 - 🎙️ **Ativação por Voz (Hands-Free):** Fale *"Acorda, Neo"* de qualquer lugar da sala. Sem atalhos manuais ou cliques necessários.
 - ⚡ **Interrupção por Voz (Barge-in / Fala Interrompível):** Fale *"Acorda, Neo"* ou *"Pare"* a qualquer momento enquanto o assistente estiver respondendo para cortar o áudio instantaneamente e fazer uma nova pergunta sem precisar esperar.
+- 🧠 **Memória Contextual Multi-turn:** Mantém o histórico das últimas trocas da conversa para diálogos encadeados naturais (ex.: *"Quem dirigiu Matrix?"* ➔ *"E quais outros filmes elas fizeram?"*). O contexto é preservado mesmo alternando entre Ollama e Claude, e pode ser reiniciado por voz (*"Limpar conversa"*) ou pelo botão de novo chat no cabeçalho.
+- 🎵 **Controle de Mídia MPRIS (Pausa Automática do Spotify):** Pausa automaticamente o Spotify, reprodutores e navegadores assim que você chama *"Acorda, Neo"*, e retoma a reprodução apenas do que estava tocando assim que a conversa é finalizada. Também aceita comandos de voz diretos (*"Pausa a música"*, *"Próxima música"*, *"Que música está tocando?"*).
 - 🔒 **Reconhecimento de Voz 100% Privativo (Local):** Processado localmente no processador via `faster-whisper`.
 - 🎚️ **Tratamento de Áudio & AGC Digital:**
   - Remoção automática de bias analógico (DC offset) que costuma estragar o reconhecimento em laptops.
