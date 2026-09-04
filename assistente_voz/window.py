@@ -1,8 +1,11 @@
-"""Janela principal GTK3: avatar, histórico da conversa, botão de microfone
-e seletor de voz.
+"""Janela principal GTK3: avatar, histórico da conversa e escuta contínua.
+
+Sem botão de microfone — o app fica sempre ouvindo em segundo plano e só
+"acorda" quando reconhece a frase de ativação ("Acorda, Neo").
 """
 
 import threading
+import time
 import traceback
 from pathlib import Path
 
@@ -13,36 +16,43 @@ gi.require_version("GdkPixbuf", "2.0")
 from gi.repository import GdkPixbuf, GLib, Gtk
 
 from . import config
+from . import stt
 from .claude_client import ClaudeClient
-from .stt import Gravador, transcrever
 from .tts import sintetizar, tocar
 
 ASSETS_DIR = Path(__file__).resolve().parent.parent / "assets"
 AVATAR_PATH = ASSETS_DIR / "avatar.png"
 
+DURACAO_CLIPE_ATIVACAO = 3.0     # segundos por trecho enquanto espera "Acorda, Neo"
+DURACAO_CLIPE_PERGUNTA = 2.5     # segundos por trecho enquanto ouve a pergunta
+TOLERANCIA_SILENCIO = 1          # nº de trechos vazios seguidos até considerar que a pergunta acabou
+MAX_SEGUNDOS_PERGUNTA = 20       # teto de segurança pra não gravar pra sempre
+
 
 class JanelaPrincipal(Gtk.Window):
     def __init__(self):
-        super().__init__(title="Assistente de Voz")
+        super().__init__(title="Acorda, Neo")
         self.set_default_size(440, 720)
         self.set_border_width(0)
 
         self._config = config.carregar()
         self._claude = None
-        self._gravador = None
-        self._gravando = False
         self._ocupado = False
+        self._escutando = True
 
         self._montar_ui()
-        self.connect("destroy", Gtk.main_quit)
+        self.connect("destroy", self._ao_fechar)
 
         if not self._config.get("anthropic_api_key"):
             GLib.idle_add(self._abrir_preferencias, True)
 
+        thread_escuta = threading.Thread(target=self._loop_escuta_continua, daemon=True)
+        thread_escuta.start()
+
     # ------------------------------------------------------------------ UI
 
     def _montar_ui(self):
-        header = Gtk.HeaderBar(title="Assistente de Voz", show_close_button=True)
+        header = Gtk.HeaderBar(title="Acorda, Neo", show_close_button=True)
         botao_config = Gtk.Button.new_from_icon_name("preferences-system-symbolic", Gtk.IconSize.BUTTON)
         botao_config.set_tooltip_text("Preferências (chave da API e voz)")
         botao_config.connect("clicked", lambda *_a: self._abrir_preferencias(False))
@@ -61,7 +71,7 @@ class JanelaPrincipal(Gtk.Window):
         self._carregar_avatar(180)
         topo.pack_start(self._avatar_img, False, False, 0)
 
-        self._status_label = Gtk.Label(label="Pronto. Clique no microfone e fale.")
+        self._status_label = Gtk.Label(label="👂 Diga \"Acorda, Neo\" pra começar.")
         self._status_label.set_justify(Gtk.Justification.CENTER)
         topo.pack_start(self._status_label, False, False, 0)
 
@@ -75,10 +85,12 @@ class JanelaPrincipal(Gtk.Window):
         scroll.add(self._chat_box)
         self._scroll_window = scroll
 
-        # --- Rodapé: voz + microfone ---------------------------------------------
+        # --- Rodapé: só o seletor de voz, sem botão ------------------------------
         rodape = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
         rodape.set_border_width(16)
         raiz.pack_start(rodape, False, False, 0)
+
+        rodape.pack_start(Gtk.Label(label="Voz das respostas:", xalign=0), False, False, 0)
 
         self._voz_combo = Gtk.ComboBoxText()
         for id_voz, nome in config.VOZES_DISPONIVEIS:
@@ -87,12 +99,6 @@ class JanelaPrincipal(Gtk.Window):
         self._voz_combo.set_active_id(voz_atual)
         self._voz_combo.connect("changed", self._on_trocar_voz)
         rodape.pack_start(self._voz_combo, False, False, 0)
-
-        self._botao_mic = Gtk.ToggleButton()
-        self._botao_mic.set_label("🎙️  Falar")
-        self._botao_mic.get_style_context().add_class("suggested-action")
-        self._botao_mic.connect("toggled", self._on_alternar_gravacao)
-        rodape.pack_start(self._botao_mic, False, False, 0)
 
     def _carregar_avatar(self, tamanho: int):
         if AVATAR_PATH.exists():
@@ -127,9 +133,11 @@ class JanelaPrincipal(Gtk.Window):
 
         adj = self._scroll_window.get_vadjustment()
         GLib.idle_add(lambda: adj.set_value(adj.get_upper()))
+        return False
 
     def _definir_status(self, texto: str):
         self._status_label.set_text(texto)
+        return False
 
     # ------------------------------------------------------------ Preferências
 
@@ -178,45 +186,73 @@ class JanelaPrincipal(Gtk.Window):
         self._config["voz"] = combo.get_active_id() or config.DEFAULT_VOICE
         config.salvar(self._config)
 
-    # -------------------------------------------------------------- Gravação
+    # ---------------------------------------------------------- Escuta contínua
 
-    def _on_alternar_gravacao(self, botao: Gtk.ToggleButton):
-        if self._ocupado:
-            botao.set_active(self._gravando)
-            return
+    def _ao_fechar(self, *_args):
+        self._escutando = False
+        Gtk.main_quit()
 
-        if botao.get_active():
-            self._iniciar_gravacao()
-        else:
-            self._parar_gravacao_e_processar()
+    def _loop_escuta_continua(self):
+        """Roda pra sempre numa thread separada: grava trechos curtos e checa se
+        a frase de ativação foi dita. Pausa enquanto uma pergunta está sendo
+        processada ou a resposta está sendo falada, pra não se auto-escutar.
+        """
+        while self._escutando:
+            if self._ocupado or not self._config.get("anthropic_api_key"):
+                time.sleep(0.2)
+                continue
 
-    def _iniciar_gravacao(self):
-        self._gravando = True
-        self._botao_mic.set_label("⏹️  Parar")
-        self._definir_status("🎙️ Ouvindo... clique em \"Parar\" quando terminar.")
-        self._gravador = Gravador()
-        self._gravador.iniciar()
+            try:
+                GLib.idle_add(self._definir_status, "👂 Diga \"Acorda, Neo\" pra começar.")
+                clipe = stt.gravar_clipe(DURACAO_CLIPE_ATIVACAO)
 
-    def _parar_gravacao_e_processar(self):
-        self._gravando = False
-        self._ocupado = True
-        self._botao_mic.set_sensitive(False)
-        self._botao_mic.set_label("🎙️  Falar")
-        self._definir_status("🤔 Processando o que você disse...")
+                if not self._escutando:
+                    break
 
-        thread = threading.Thread(target=self._processar_pergunta, daemon=True)
-        thread.start()
+                if clipe is None:
+                    # Gravação falhou (mic ocupado, dispositivo indisponível...) —
+                    # espera um pouco antes de tentar de novo, sem girar sem parar.
+                    time.sleep(1.0)
+                    continue
 
-    # --------------------------------------------------------- Pipeline (thread)
+                if stt.contem_palavra_ativacao(clipe):
+                    self._ocupado = True
+                    self._processar_ciclo_pergunta()
+                    self._ocupado = False
+            except Exception:
+                traceback.print_exc()
+                self._ocupado = False
+                time.sleep(1.0)
 
-    def _processar_pergunta(self):
+    def _capturar_pergunta(self) -> str:
+        """Grava trechos curtos em sequência, transcrevendo cada um, até detectar
+        um trecho de silêncio (ou estourar o tempo máximo)."""
+        texto_total = []
+        segundos_gastos = 0.0
+        trechos_vazios_seguidos = 0
+
+        while segundos_gastos < MAX_SEGUNDOS_PERGUNTA:
+            clipe = stt.gravar_clipe(DURACAO_CLIPE_PERGUNTA)
+            segundos_gastos += DURACAO_CLIPE_PERGUNTA
+            texto = stt.transcrever(clipe)
+
+            if texto:
+                texto_total.append(texto)
+                trechos_vazios_seguidos = 0
+            else:
+                trechos_vazios_seguidos += 1
+                if texto_total and trechos_vazios_seguidos >= TOLERANCIA_SILENCIO:
+                    break
+
+        return " ".join(texto_total).strip()
+
+    def _processar_ciclo_pergunta(self):
         try:
-            caminho_wav = self._gravador.parar()
-            texto_usuario = transcrever(caminho_wav)
+            GLib.idle_add(self._definir_status, "🎙️ Pode perguntar...")
+            texto_usuario = self._capturar_pergunta()
 
             if not texto_usuario:
-                GLib.idle_add(self._definir_status, "Não entendi nada, tenta de novo.")
-                GLib.idle_add(self._finalizar_processamento)
+                GLib.idle_add(self._definir_status, "Não entendi nada, diga \"Acorda, Neo\" de novo.")
                 return
 
             GLib.idle_add(self._adicionar_balao, texto_usuario, "usuario")
@@ -235,15 +271,6 @@ class JanelaPrincipal(Gtk.Window):
             voz = self._config.get("voz", config.DEFAULT_VOICE)
             caminho_audio = sintetizar(resposta, voz)
             tocar(caminho_audio)
-
-            GLib.idle_add(self._definir_status, "Pronto. Clique no microfone e fale.")
         except Exception as exc:  # noqa: BLE001 - mostrar qualquer erro pro usuário
             traceback.print_exc()
             GLib.idle_add(self._definir_status, f"⚠️ Erro: {exc}")
-        finally:
-            GLib.idle_add(self._finalizar_processamento)
-
-    def _finalizar_processamento(self):
-        self._ocupado = False
-        self._botao_mic.set_sensitive(True)
-        return False

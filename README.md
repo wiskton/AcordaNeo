@@ -1,16 +1,21 @@
-# 🎙️ Assistente de Voz
+# 🕶️ Acorda, Neo
 
-App de desktop (GTK3) pra conversar por voz com a Claude: você pergunta
-falando, o app transcreve, manda pra API da Anthropic, e a resposta volta
-falada — com várias vozes possíveis pra escolher.
+App de desktop (GTK3) pra conversar por voz com a Claude: fica sempre
+ouvindo em segundo plano, e quando você diz **"Acorda, Neo"** ele ativa,
+escuta sua pergunta, manda pra API da Anthropic, e a resposta volta falada
+— com várias vozes possíveis pra escolher. Sem botão nenhum pra apertar.
 
 ## ✨ Como funciona
 
-1. Clique em **🎙️ Falar**, faça sua pergunta, clique em **⏹️ Parar**
-2. O áudio é transcrito **localmente** (Whisper, sem mandar sua voz pra
+1. Fale **"Acorda, Neo"** — o app está sempre escutando trechos curtos em
+   segundo plano esperando essa frase
+2. Assim que reconhece a ativação, começa a gravar sua pergunta e para
+   sozinho quando você fica em silêncio por um instante
+3. O áudio é transcrito **localmente** (Whisper, sem mandar sua voz pra
    nenhum servidor de terceiros)
-3. O texto vai pra API da Claude, que responde em texto
-4. A resposta é sintetizada em voz (você escolhe a voz no rodapé) e tocada
+4. O texto vai pra API da Claude, que responde em texto
+5. A resposta é sintetizada em voz (você escolhe a voz no rodapé) e tocada
+   — depois disso o app volta a escutar a próxima ativação
 
 ## 🧱 Stack
 
@@ -18,7 +23,7 @@ falada — com várias vozes possíveis pra escolher.
 |---|---|
 | Interface | GTK3 (PyGObject) |
 | Cérebro | API da Anthropic (Claude) |
-| Reconhecimento de voz (STT) | [faster-whisper](https://github.com/SYSTRAN/faster-whisper), local, sem chave de API |
+| Reconhecimento de voz (STT) | [faster-whisper](https://github.com/SYSTRAN/faster-whisper), local, sem chave de API (modelo "tiny" pra escuta contínua da ativação, "small" pra transcrever a pergunta) |
 | Síntese de voz (TTS) | [edge-tts](https://github.com/rany2/edge-tts), gratuito, várias vozes neurais |
 | Gravação/reprodução de áudio | `arecord` / `ffplay` (ALSA + ffmpeg, evita depender de PyAudio) |
 

@@ -10,8 +10,12 @@
       <stop offset="100%" stop-color="#050607"/>
     </linearGradient>
     <linearGradient id="skin" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#5a4033"/>
-      <stop offset="100%" stop-color="#3c2a21"/>
+      <stop offset="0%" stop-color="#d3ab8b"/>
+      <stop offset="100%" stop-color="#b3835f"/>
+    </linearGradient>
+    <linearGradient id="hair" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#2a2420"/>
+      <stop offset="100%" stop-color="#0e0c0a"/>
     </linearGradient>
     <linearGradient id="lens" x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" stop-color="#1a3d2e"/>
@@ -47,53 +51,53 @@
 
   <circle cx="256" cy="256" r="248" fill="none" stroke="#2ee878" stroke-width="2" opacity="0.25"/>
 
-  <!-- ombros / casaco de gola alta -->
+  <!-- ombros / trench coat de gola alta e pontuda -->
   <path d="M 96 512 C 96 388 160 332 256 332 C 352 332 416 388 416 512 Z" fill="url(#coat)"/>
-  <path d="M 176 512 C 178 430 210 380 256 372 C 302 380 334 430 336 512 Z" fill="#0b0d0e"/>
-  <path d="M 224 372 L 256 420 L 288 372 C 278 366 266 362 256 362 C 246 362 234 366 224 372 Z" fill="#161a1c"/>
+  <path d="M 172 512 C 174 428 208 378 256 372 C 304 378 338 428 340 512 Z" fill="#0b0d0e"/>
+  <path d="M 216 374 L 256 452 L 296 374 C 282 366 268 362 256 362 C 244 362 230 366 216 374 Z" fill="#171b1d"/>
 
   <!-- pescoço -->
   <rect x="228" y="300" width="56" height="60" rx="18" fill="url(#skin)"/>
 
-  <!-- cabeça (careca) -->
+  <!-- cabeça -->
   <ellipse cx="256" cy="230" rx="98" ry="108" fill="url(#skin)"/>
-  <path d="M 158 230 C 158 165 200 118 256 118 C 312 118 354 165 354 230 C 354 205 320 190 256 190 C 192 190 158 205 158 230 Z" fill="#2a1c16" opacity="0.35"/>
 
   <!-- orelhas -->
   <ellipse cx="152" cy="238" rx="14" ry="20" fill="url(#skin)"/>
   <ellipse cx="360" cy="238" rx="14" ry="20" fill="url(#skin)"/>
 
-  <!-- sobrancelhas -->
-  <path d="M 186 196 Q 210 184 234 194" stroke="#1c130f" stroke-width="7" fill="none" stroke-linecap="round"/>
-  <path d="M 278 194 Q 302 184 326 196" stroke="#1c130f" stroke-width="7" fill="none" stroke-linecap="round"/>
+  <!-- cabelo curto e desalinhado -->
+  <path d="M 154 200
+           C 148 140 195 108 256 108
+           C 317 108 364 140 358 200
+           C 356 176 340 160 320 172
+           C 322 152 300 138 280 148
+           C 276 132 244 130 234 146
+           C 214 134 190 148 190 168
+           C 170 158 152 172 154 200 Z" fill="url(#hair)"/>
+  <path d="M 160 196 C 158 178 166 162 180 154" stroke="#050403" stroke-width="5" fill="none" stroke-linecap="round" opacity="0.5"/>
+  <path d="M 352 196 C 354 178 346 162 332 154" stroke="#050403" stroke-width="5" fill="none" stroke-linecap="round" opacity="0.5"/>
 
-  <!-- óculos estilo Matrix -->
+  <!-- sobrancelhas -->
+  <path d="M 188 200 Q 210 190 232 198" stroke="#1c130f" stroke-width="6" fill="none" stroke-linecap="round"/>
+  <path d="M 280 198 Q 302 190 324 200" stroke="#1c130f" stroke-width="6" fill="none" stroke-linecap="round"/>
+
+  <!-- óculos redondos estilo Neo -->
   <g>
-    <path d="M 150 214 L 362 214 L 356 236 C 340 226 300 220 256 220 C 212 220 172 226 156 236 Z" fill="#05070a"/>
-    <rect x="160" y="208" width="88" height="52" rx="22" fill="url(#lens)" stroke="#000" stroke-width="3"/>
-    <rect x="264" y="208" width="88" height="52" rx="22" fill="url(#lens)" stroke="#000" stroke-width="3"/>
-    <path d="M 182 222 L 220 222" stroke="#3ef58a" stroke-width="4" stroke-linecap="round" opacity="0.75"/>
-    <path d="M 286 222 L 324 222" stroke="#3ef58a" stroke-width="4" stroke-linecap="round" opacity="0.75"/>
-    <path d="M 118 220 L 160 224" stroke="#05070a" stroke-width="10" stroke-linecap="round"/>
-    <path d="M 394 220 L 352 224" stroke="#05070a" stroke-width="10" stroke-linecap="round"/>
+    <path d="M 176 212 L 336 212" stroke="#05070a" stroke-width="6" stroke-linecap="round"/>
+    <ellipse cx="212" cy="228" rx="42" ry="34" fill="url(#lens)" stroke="#000" stroke-width="4"/>
+    <ellipse cx="300" cy="228" rx="42" ry="34" fill="url(#lens)" stroke="#000" stroke-width="4"/>
+    <path d="M 190 220 L 216 220" stroke="#3ef58a" stroke-width="4" stroke-linecap="round" opacity="0.75"/>
+    <path d="M 278 220 L 304 220" stroke="#3ef58a" stroke-width="4" stroke-linecap="round" opacity="0.75"/>
+    <path d="M 130 224 L 170 220" stroke="#05070a" stroke-width="8" stroke-linecap="round"/>
+    <path d="M 382 224 L 342 220" stroke="#05070a" stroke-width="8" stroke-linecap="round"/>
   </g>
 
   <!-- nariz (sutil, só a sombra da base) -->
-  <path d="M 246 262 Q 256 270 266 262" stroke="#2a1c16" stroke-width="4" fill="none" stroke-linecap="round" opacity="0.5"/>
-
-  <!-- cavanhaque (contorna o queixo, por baixo da boca) -->
-  <path d="M 206 270
-           C 204 292 210 320 232 336
-           C 240 341 248 344 256 344
-           C 264 344 272 341 280 336
-           C 302 320 308 292 306 270
-           C 300 288 286 306 256 306
-           C 226 306 212 288 206 270 Z" fill="#171010"/>
-  <path d="M 210 262 C 208 280 210 296 218 310" stroke="#171010" stroke-width="14" fill="none" stroke-linecap="round" opacity="0.9"/>
-  <path d="M 302 262 C 304 280 302 296 294 310" stroke="#171010" stroke-width="14" fill="none" stroke-linecap="round" opacity="0.9"/>
+  <path d="M 246 268 Q 256 276 266 268" stroke="#a37854" stroke-width="4" fill="none" stroke-linecap="round" opacity="0.6"/>
 
   <!-- boca -->
-  <path d="M 232 298 Q 256 306 280 298" stroke="#0d0908" stroke-width="5" fill="none" stroke-linecap="round"/>
+  <path d="M 230 300 Q 256 308 282 300" stroke="#7a4f38" stroke-width="5" fill="none" stroke-linecap="round"/>
 
   <!-- brilho de contorno (rim light) -->
   <path d="M 168 260 C 160 200 195 130 256 122" stroke="#3ef58a" stroke-width="5" fill="none" stroke-linecap="round" opacity="0.35"/>

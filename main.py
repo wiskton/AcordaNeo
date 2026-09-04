@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
-"""Assistente de Voz — pergunte por voz, a Claude responde por voz.
+"""Acorda, Neo — diga a frase de ativação e converse por voz com a Claude.
 
 Uso: python3 main.py  (ou ./run.sh, que cria a venv e instala tudo sozinho)
 """
+
+import sys
 
 import gi
 
@@ -10,6 +12,7 @@ gi.require_version("Gtk", "3.0")
 gi.require_version("Gdk", "3.0")
 from gi.repository import Gdk, Gtk
 
+from assistente_voz import singleinstance
 from assistente_voz.window import JanelaPrincipal
 
 CSS = b"""
@@ -29,6 +32,18 @@ CSS = b"""
 
 
 def main():
+    if not singleinstance.adquirir():
+        dialogo = Gtk.MessageDialog(
+            message_type=Gtk.MessageType.WARNING,
+            buttons=Gtk.ButtonsType.OK,
+            text="O Acorda, Neo já está rodando.",
+            secondary_text="Só pode ter uma instância aberta por vez (as duas ficariam "
+            "brigando pelo microfone). Feche a outra janela antes de abrir de novo.",
+        )
+        dialogo.run()
+        dialogo.destroy()
+        sys.exit(1)
+
     provider = Gtk.CssProvider()
     provider.load_from_data(CSS)
     Gtk.StyleContext.add_provider_for_screen(

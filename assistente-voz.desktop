@@ -1,12 +1,12 @@
 [Desktop Entry]
 Version=1.0
 Type=Application
-Name=Assistente de Voz
+Name=Acorda, Neo
 GenericName=Assistente de Voz com IA (Claude)
-Comment=Pergunte por voz, a Claude responde por voz
+Comment=Diga "Acorda, Neo" pra ativar — converse por voz com a Claude
 Exec=/home/willem/Documents/GitHub/assistente-voz/run.sh
 Icon=/home/willem/.local/share/icons/assistente-voz.png
 Terminal=false
 Categories=Utility;AudioVideo;
-Keywords=voz;assistente;ia;claude;audio;chat;
+Keywords=voz;assistente;ia;claude;audio;chat;neo;
 StartupNotify=true
