@@ -31,6 +31,14 @@ Todo o reconhecimento de áudio (STT) e a inteligência do modelo de linguagem (
 
 ---
 
+## 📸 Interface do Aplicativo
+
+<p align="center">
+  <img src="assets/screenshot.png" alt="Interface Gráfica do Acorda Neo" width="420" />
+</p>
+
+---
+
 ## ⚡ Fluxo de Funcionamento
 
 ```mermaid
