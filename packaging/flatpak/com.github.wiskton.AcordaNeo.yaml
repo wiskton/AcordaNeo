@@ -45,8 +45,10 @@ modules:
       - install -Dm755 main.py /app/bin/acordaneo
       - cp -r assistente_voz /app/bin/
       - cp -r assets /app/bin/
-      - install -Dm644 acordaneo.desktop /app/share/applications/com.github.wiskton.AcordaNeo.desktop
+      - install -Dm644 packaging/flatpak/com.github.wiskton.AcordaNeo.desktop /app/share/applications/com.github.wiskton.AcordaNeo.desktop
+      - install -Dm644 packaging/flatpak/com.github.wiskton.AcordaNeo.metainfo.xml /app/share/metainfo/com.github.wiskton.AcordaNeo.metainfo.xml
       - install -Dm644 assets/avatar.png /app/share/icons/hicolor/256x256/apps/com.github.wiskton.AcordaNeo.png
     sources:
-      - type: dir
-        path: ../../
+      - type: git
+        url: https://github.com/wiskton/AcordaNeo.git
+        tag: v0.3.0
