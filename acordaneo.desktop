@@ -2,11 +2,12 @@
 Version=1.0
 Type=Application
 Name=Acorda, Neo
-GenericName=Assistente de Voz com IA (Claude)
-Comment=Diga "Acorda, Neo" pra ativar — converse por voz com a Claude
+GenericName=Assistente de Voz com IA (Ollama / Claude)
+Comment=Diga "Acorda, Neo" pra ativar — converse por voz com IA offline ou em nuvem
 Exec=/home/willem/Documents/GitHub/acordaneo/run.sh
-Icon=/home/willem/.local/share/icons/assistente-voz.png
+Icon=acordaneo
 Terminal=false
 Categories=Utility;AudioVideo;
-Keywords=voz;assistente;ia;claude;audio;chat;neo;
+Keywords=voz;assistente;ia;claude;ollama;audio;chat;neo;matrix;
 StartupNotify=true
+StartupWMClass=acordaneo

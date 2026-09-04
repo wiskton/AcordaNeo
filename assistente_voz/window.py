@@ -41,6 +41,13 @@ class JanelaPrincipal(Gtk.Window):
         self.set_default_size(460, 750)
         self.set_border_width(0)
 
+        # Configura ícone da janela e identificadores para o ambiente desktop Pop!_OS / COSMIC / GNOME
+        if AVATAR_PATH.exists():
+            self.set_icon_from_file(str(AVATAR_PATH))
+        self.set_icon_name("acordaneo")
+        self.set_wmclass("acordaneo", "acordaneo")
+        self.set_role("acordaneo")
+
         # Garante níveis saudáveis no microfone ALSA (sem saturação de boost)
         stt.configurar_microfone_sistema()
 
@@ -72,6 +79,7 @@ class JanelaPrincipal(Gtk.Window):
 
     def _montar_ui(self):
         header = Gtk.HeaderBar(title="Acorda, Neo", show_close_button=True)
+        header.set_subtitle("SYSTEM READY // MATRIX AI")
         botao_config = Gtk.Button.new_from_icon_name("preferences-system-symbolic", Gtk.IconSize.BUTTON)
         botao_config.set_tooltip_text("Preferências (IA, modelo e voz)")
         botao_config.connect("clicked", lambda *_a: self._abrir_preferencias(False))
@@ -81,17 +89,18 @@ class JanelaPrincipal(Gtk.Window):
         raiz = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         self.add(raiz)
 
-        # --- Avatar + status ---------------------------------------------------
+        # --- Avatar + status (Card Matrix) --------------------------------------
         topo = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
-        topo.set_border_width(20)
+        topo.get_style_context().add_class("matrix-topo-box")
         raiz.pack_start(topo, False, False, 0)
 
         self._avatar_img = Gtk.Image()
-        self._carregar_avatar(170)
+        self._carregar_avatar(160)
         topo.pack_start(self._avatar_img, False, False, 0)
 
-        self._status_label = Gtk.Label(label="👂 Diga \"Acorda, Neo\" pra começar.")
+        self._status_label = Gtk.Label(label="[ SYSTEM ONLINE ]  Diga \"Acorda, Neo\"")
         self._status_label.set_justify(Gtk.Justification.CENTER)
+        self._status_label.get_style_context().add_class("terminal-status")
         topo.pack_start(self._status_label, False, False, 0)
 
         # --- Histórico da conversa ----------------------------------------------
@@ -104,14 +113,16 @@ class JanelaPrincipal(Gtk.Window):
         scroll.add(self._chat_box)
         self._scroll_window = scroll
 
-        # --- Rodapé: seletores de Provedor, Modelo e Voz ------------------------
-        rodape = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
-        rodape.set_border_width(14)
+        # --- Rodapé: seletores de Provedor, Modelo e Voz (Console Matrix) -------
+        rodape = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        rodape.get_style_context().add_class("matrix-rodape")
         raiz.pack_start(rodape, False, False, 0)
 
         # Seletor de Cérebro (IA)
         linha_provedor = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-        linha_provedor.pack_start(Gtk.Label(label="Cérebro da IA:", xalign=0), False, False, 0)
+        lbl_p = Gtk.Label(label="CÉREBRO IA:", xalign=0)
+        lbl_p.get_style_context().add_class("matrix-label")
+        linha_provedor.pack_start(lbl_p, False, False, 0)
         self._provedor_combo = Gtk.ComboBoxText()
         for id_p, nome_p in config.PROVEDORES_DISPONIVEIS:
             self._provedor_combo.append(id_p, nome_p)
@@ -122,7 +133,9 @@ class JanelaPrincipal(Gtk.Window):
 
         # Seletor de Modelo Local Ollama
         self._linha_modelo_ollama = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-        self._linha_modelo_ollama.pack_start(Gtk.Label(label="Modelo Local:", xalign=0), False, False, 0)
+        lbl_m = Gtk.Label(label="MODELO LOCAL:", xalign=0)
+        lbl_m.get_style_context().add_class("matrix-label")
+        self._linha_modelo_ollama.pack_start(lbl_m, False, False, 0)
         self._modelo_ollama_combo = Gtk.ComboBoxText()
         self._atualizar_modelos_ollama_combo()
         self._modelo_ollama_combo.connect("changed", self._on_trocar_modelo_ollama)
@@ -131,7 +144,9 @@ class JanelaPrincipal(Gtk.Window):
 
         # Seletor de Voz
         linha_voz = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-        linha_voz.pack_start(Gtk.Label(label="Voz das respostas:", xalign=0), False, False, 0)
+        lbl_v = Gtk.Label(label="VOZ DO NEO:", xalign=0)
+        lbl_v.get_style_context().add_class("matrix-label")
+        linha_voz.pack_start(lbl_v, False, False, 0)
         self._voz_combo = Gtk.ComboBoxText()
         for id_voz, nome in config.VOZES_DISPONIVEIS:
             self._voz_combo.append(id_voz, nome)
@@ -177,18 +192,28 @@ class JanelaPrincipal(Gtk.Window):
         alinhamento = Gtk.Align.END if autor == "usuario" else Gtk.Align.START
         cor_classe = "usuario" if autor == "usuario" else "assistente"
 
+        box_conteudo = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+
+        prefixo = "🧑 VOCÊ" if autor == "usuario" else "🕶️ NEO"
+        lbl_autor = Gtk.Label(label=prefixo)
+        lbl_autor.set_xalign(1.0 if autor == "usuario" else 0.0)
+        lbl_autor.get_style_context().add_class(f"balao-autor-{cor_classe}")
+        box_conteudo.pack_start(lbl_autor, False, False, 0)
+
         label = Gtk.Label(label=texto)
         label.set_line_wrap(True)
         label.set_max_width_chars(38)
         label.set_xalign(0)
         label.set_selectable(True)
+        label.get_style_context().add_class(f"balao-texto-{cor_classe}")
+        box_conteudo.pack_start(label, False, False, 0)
 
         moldura = Gtk.Frame()
         moldura.set_shadow_type(Gtk.ShadowType.NONE)
         moldura.get_style_context().add_class(f"balao-{cor_classe}")
-        moldura.add(label)
+        moldura.add(box_conteudo)
         moldura.set_halign(alinhamento)
-        moldura.set_border_width(6)
+        moldura.set_border_width(4)
 
         self._chat_box.pack_start(moldura, False, False, 0)
         self._chat_box.show_all()
@@ -206,7 +231,9 @@ class JanelaPrincipal(Gtk.Window):
     # ------------------------------------------------------------ Preferências
 
     def _abrir_preferencias(self, obrigatorio: bool):
-        dialogo = Gtk.Dialog(title="Preferências", transient_for=self, modal=True)
+        dialogo = Gtk.Dialog(title="Preferências do Sistema", transient_for=self, modal=True)
+        if AVATAR_PATH.exists():
+            dialogo.set_icon_from_file(str(AVATAR_PATH))
         dialogo.add_buttons(Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL, Gtk.STOCK_SAVE, Gtk.ResponseType.OK)
         box = dialogo.get_content_area()
         box.set_border_width(16)

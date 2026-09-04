@@ -37,5 +37,15 @@ if command -v ollama >/dev/null 2>&1; then
     fi
 fi
 
+# Integração com o Pop!_OS / Desktop (ícone e lançador)
+DESKTOP_DIR="$HOME/.local/share/applications"
+ICON_DIR="$HOME/.local/share/icons"
+if [ -f "$SCRIPT_DIR/acordaneo.desktop" ]; then
+    mkdir -p "$DESKTOP_DIR" "$ICON_DIR"
+    cp -f "$SCRIPT_DIR/assets/avatar.png" "$ICON_DIR/acordaneo.png" 2>/dev/null || true
+    cp -f "$SCRIPT_DIR/acordaneo.desktop" "$DESKTOP_DIR/acordaneo.desktop" 2>/dev/null || true
+fi
+
 echo "🚀 Iniciando Acorda, Neo..."
 exec python3 main.py
+

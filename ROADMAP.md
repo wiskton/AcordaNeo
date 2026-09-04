@@ -17,7 +17,8 @@ Este documento delineia a visão e o planejamento de evolução do **Acorda, Neo
   - Calibração automática do preamp ALSA para codecs sensíveis (ex.: Realtek ALC257).
 - [x] **Detecção de atividade de voz (VAD):** Integração com Silero VAD para detecção ágil do fim da fala sem cortes abruptos.
 - [x] **Captura de frases completas:** Acumulação contínua de áudio e transcrição em passagem única.
-- [x] **Interface gráfica GTK3:** Avatar, balões de chat estilo mensageiro, seletores dinâmicos de IA/Modelo/Voz no rodapé e painel de preferências.
+- [x] **Interface gráfica GTK3 com Tema Matrix:** Design cyberpunk com paleta verde fósforo (#00ff66), cabeçalho terminal, balões de conversa com tags e console de controle no rodapé.
+- [x] **Integração completa com Pop!_OS / COSMIC / GNOME:** Ícones em múltiplas resoluções, mapeamento de StartupWMClass e suporte a Wayland sem ícone genérico.
 
 ---
 

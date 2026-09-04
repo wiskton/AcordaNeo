@@ -59,6 +59,10 @@ flowchart LR
 - 🕶️ **Vozes Inspiradas no Neo (Matrix):**
   - **🕶️ Neo Dublado PT-BR:** Tom grave, calmo e cadenciado no estilo clássico da dublagem brasileira.
   - **🕶️ Neo Keanu Reeves:** Timbre introspectivo com o vocal fry característico do Keanu.
+- 🟢 **Layout Visual Temático Estilo Matrix:**
+  - Interface GTK3 cyberpunk com paleta dark phosphor green (`#00ff66`), cabeçalho estilo terminal, cartões neon e balões de diálogo com identificadores (`🧑 VOCÊ` e `🕶️ NEO`).
+- 🖥️ **Integração Nativa com o Desktop Pop!_OS (COSMIC / GNOME):**
+  - Ícone oficial do Neo integrado em alta resolução (16x16 até 512x512 + SVG), perfeitamente associado ao lançador, Dock, Alt-Tab e barra de janelas via `StartupWMClass`.
 - 🎙️ **Ativação por Voz (Hands-Free):** Fale *"Acorda, Neo"* de qualquer lugar da sala. Sem atalhos manuais ou cliques necessários.
 - 🔒 **Reconhecimento de Voz 100% Privativo (Local):** Processado localmente no processador via `faster-whisper`.
 - 🎚️ **Tratamento de Áudio & AGC Digital:**
@@ -66,7 +70,7 @@ flowchart LR
   - Normalização inteligente de ganho (AGC): fala baixa ou distante é amplificada sem ruídos.
   - Correção automática de ganho no ALSA para codecs sensíveis (ex.: Realtek ALC257).
 - ⏱️ **VAD (Voice Activity Detection) em Tempo Real:** Detecta pausas naturais de silêncio e encerra a gravação automaticamente, unindo todo o áudio antes da transcrição para evitar palavras cortadas.
-- 🖥️ **Interface Nativa GTK3:** Interface moderna, leve e responsiva com avatar, histórico de mensagens, seletores rápidos no rodapé e janela de preferências.
+- 📌 **Bandeja do Sistema (System Tray):** Fica ativo ouvindo em segundo plano mesmo se a janela for fechada, com menu rápido de ações.
 
 ---
 
