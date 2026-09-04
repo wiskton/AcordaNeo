@@ -26,5 +26,9 @@ for cmd in arecord ffplay; do
     fi
 done
 
-echo "🚀 Iniciando Assistente de Voz..."
+# Calibra ganho do microfone interno (evita distorção e saturação no codec ALC257)
+amixer -c 0 sset 'Internal Mic Boost' 0 >/dev/null 2>&1 || true
+amixer -c 0 sset 'Capture' 45 >/dev/null 2>&1 || true
+
+echo "🚀 Iniciando Acorda, Neo..."
 exec python3 main.py

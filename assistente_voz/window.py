@@ -4,6 +4,8 @@ Sem botão de microfone — o app fica sempre ouvindo em segundo plano e só
 "acorda" quando reconhece a frase de ativação ("Acorda, Neo").
 """
 
+import os
+import tempfile
 import threading
 import time
 import traceback
@@ -25,9 +27,10 @@ ASSETS_DIR = Path(__file__).resolve().parent.parent / "assets"
 AVATAR_PATH = ASSETS_DIR / "avatar.png"
 
 DURACAO_CLIPE_ATIVACAO = 3       # segundos por trecho enquanto espera "Acorda, Neo"
-DURACAO_CLIPE_PERGUNTA = 3       # segundos por trecho enquanto ouve a pergunta (arecord só aceita inteiro)
-TOLERANCIA_SILENCIO = 1          # nº de trechos vazios seguidos até considerar que a pergunta acabou
-MAX_SEGUNDOS_PERGUNTA = 20       # teto de segurança pra não gravar pra sempre
+DURACAO_CLIPE_PERGUNTA = 2       # segundos por trecho enquanto ouve a pergunta
+MAX_SILENCIOS_INICIAIS = 3       # até 6s de espera para o usuário começar a falar
+MAX_SILENCIOS_APOS_FALA = 1      # 2s de pausa após a fala encerra a pergunta
+MAX_SEGUNDOS_PERGUNTA = 25       # teto de segurança pra não gravar pra sempre
 
 
 class JanelaPrincipal(Gtk.Window):
@@ -35,6 +38,9 @@ class JanelaPrincipal(Gtk.Window):
         super().__init__(title="Acorda, Neo")
         self.set_default_size(440, 720)
         self.set_border_width(0)
+
+        # Garante níveis saudáveis no microfone ALSA (sem saturação de boost)
+        stt.configurar_microfone_sistema()
 
         self._config = config.carregar()
         self._claude = None
@@ -282,26 +288,67 @@ class JanelaPrincipal(Gtk.Window):
                 time.sleep(1.0)
 
     def _capturar_pergunta(self) -> str:
-        """Grava trechos curtos em sequência, transcrevendo cada um, até detectar
-        um trecho de silêncio (ou estourar o tempo máximo)."""
-        texto_total = []
-        segundos_gastos = 0.0
-        trechos_vazios_seguidos = 0
+        """Grava a fala do usuário acumulando trechos contínuos de áudio até detectar
+        que o usuário terminou de falar (silêncio), e então transcreve a pergunta inteira
+        de uma só vez com o modelo de alta precisão.
+        """
+        trechos = []
+        segundos_gastos = 0
+        silencios_iniciais = 0
+        silencios_apos_fala = 0
+        usuario_falou = False
 
-        while segundos_gastos < MAX_SEGUNDOS_PERGUNTA:
-            clipe = stt.gravar_clipe(DURACAO_CLIPE_PERGUNTA)
-            segundos_gastos += DURACAO_CLIPE_PERGUNTA
-            texto = stt.transcrever(clipe)
+        try:
+            while segundos_gastos < MAX_SEGUNDOS_PERGUNTA:
+                clipe = stt.gravar_clipe(DURACAO_CLIPE_PERGUNTA)
+                if clipe is None:
+                    time.sleep(0.5)
+                    continue
 
-            if texto:
-                texto_total.append(texto)
-                trechos_vazios_seguidos = 0
-            else:
-                trechos_vazios_seguidos += 1
-                if texto_total and trechos_vazios_seguidos >= TOLERANCIA_SILENCIO:
-                    break
+                segundos_gastos += DURACAO_CLIPE_PERGUNTA
+                tem_voz = stt.tem_voz(clipe)
 
-        return " ".join(texto_total).strip()
+                if tem_voz:
+                    usuario_falou = True
+                    trechos.append(clipe)
+                    silencios_apos_fala = 0
+                    GLib.idle_add(self._definir_status, "🎙️ Ouvindo...")
+                else:
+                    if not usuario_falou:
+                        # Usuário ainda não começou a falar
+                        clipe.unlink(missing_ok=True)
+                        silencios_iniciais += 1
+                        if silencios_iniciais >= MAX_SILENCIOS_INICIAIS:
+                            # Passaram até 6s e ninguém falou
+                            break
+                    else:
+                        # Usuário estava falando e fez pausa
+                        trechos.append(clipe)  # preserva o fim da palavra
+                        silencios_apos_fala += 1
+                        if silencios_apos_fala >= MAX_SILENCIOS_APOS_FALA:
+                            # Silêncio confirmado após fala -> encerra captura
+                            break
+
+            if not usuario_falou or not trechos:
+                return ""
+
+            GLib.idle_add(self._definir_status, "⏳ Entendendo...")
+            fd, caminho_junto = tempfile.mkstemp(suffix=".wav", prefix="pergunta_completa_")
+            os.close(fd)
+            destino_junto = Path(caminho_junto)
+
+            audio_completo = stt.concatenar_audios(trechos, destino_junto)
+            if audio_completo is None:
+                return ""
+
+            return stt.transcrever(audio_completo)
+
+        finally:
+            for p in trechos:
+                try:
+                    p.unlink(missing_ok=True)
+                except Exception:
+                    pass
 
     def _processar_ciclo_pergunta(self):
         try:

@@ -8,7 +8,16 @@ import json
 import os
 from pathlib import Path
 
-CONFIG_DIR = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "assistente-voz"
+_BASE_CONFIG = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
+CONFIG_DIR_ACORDANEO = _BASE_CONFIG / "acordaneo"
+CONFIG_DIR_LEGACY = _BASE_CONFIG / "assistente-voz"
+
+# Prioriza ~/.config/acordaneo se existir ou se a pasta antiga não existir
+if CONFIG_DIR_ACORDANEO.exists() or not CONFIG_DIR_LEGACY.exists():
+    CONFIG_DIR = CONFIG_DIR_ACORDANEO
+else:
+    CONFIG_DIR = CONFIG_DIR_LEGACY
+
 CONFIG_FILE = CONFIG_DIR / "config.json"
 
 DEFAULT_VOICE = "pt-BR-AntonioNeural"
@@ -46,14 +55,15 @@ def _defaults():
 
 
 def carregar():
-    if CONFIG_FILE.exists():
-        try:
-            dados = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
-            base = _defaults()
-            base.update({k: v for k, v in dados.items() if v not in (None, "")})
-            return base
-        except (json.JSONDecodeError, OSError):
-            pass
+    for arq in (CONFIG_FILE, CONFIG_DIR_LEGACY / "config.json"):
+        if arq.exists():
+            try:
+                dados = json.loads(arq.read_text(encoding="utf-8"))
+                base = _defaults()
+                base.update({k: v for k, v in dados.items() if v not in (None, "")})
+                return base
+            except (json.JSONDecodeError, OSError):
+                pass
     return _defaults()
 
 
