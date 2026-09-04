@@ -47,5 +47,5 @@ if [ -f "$SCRIPT_DIR/acordaneo.desktop" ]; then
 fi
 
 echo "🚀 Iniciando Acorda, Neo..."
-exec python3 main.py
+exec python3 main.py "$@"
 

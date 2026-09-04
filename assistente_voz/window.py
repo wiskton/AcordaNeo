@@ -21,6 +21,9 @@ from gi.repository import GdkPixbuf, GLib, Gtk
 
 from . import config
 from . import mpris
+from . import singleinstance
+from . import sistema
+from . import sons
 from . import stt
 from . import tts
 from .claude_client import ClaudeClient
@@ -66,12 +69,16 @@ class JanelaPrincipal(Gtk.Window):
         self.connect("delete-event", self._ao_deletar_janela)
         self.connect("destroy", self._ao_fechar)
 
+        # Inicializa servidor IPC para atalhos globais de teclado (Push-to-Talk)
+        singleinstance.iniciar_servidor_comandos(self._ao_comando_ipc)
+
         # Inicializa o ícone da bandeja do sistema (System Tray)
         self._tray = TrayManager(
             ao_alternar_janela=self._alternar_visibilidade_janela,
             ao_abrir_preferencias=lambda: self._abrir_preferencias(False),
             ao_sair=self._sair_aplicativo,
             icone_path=AVATAR_PATH,
+            ao_exportar_conversa=self._exportar_conversa_ui,
         )
 
         if not self._tem_credenciais_ou_provedor_pronto():
@@ -86,9 +93,14 @@ class JanelaPrincipal(Gtk.Window):
         header = Gtk.HeaderBar(title="Acorda, Neo", show_close_button=True)
 
         botao_config = Gtk.Button.new_from_icon_name("preferences-system-symbolic", Gtk.IconSize.BUTTON)
-        botao_config.set_tooltip_text("Configurações (Cérebro, Modelo e Voz)")
+        botao_config.set_tooltip_text("Configurações (Cérebro, Modelo, Voz e Prompt)")
         botao_config.connect("clicked", lambda *_a: self._abrir_preferencias(False))
         header.pack_end(botao_config)
+
+        botao_exportar = Gtk.Button.new_from_icon_name("document-save-symbolic", Gtk.IconSize.BUTTON)
+        botao_exportar.set_tooltip_text("Exportar conversa para Markdown (.md)")
+        botao_exportar.connect("clicked", lambda *_a: self._exportar_conversa_ui())
+        header.pack_end(botao_exportar)
 
         botao_limpar = Gtk.Button.new_from_icon_name("edit-clear-all-symbolic", Gtk.IconSize.BUTTON)
         botao_limpar.set_tooltip_text("Limpar histórico da conversa (Novo chat)")
@@ -192,12 +204,22 @@ class JanelaPrincipal(Gtk.Window):
 
     def _abrir_preferencias(self, obrigatorio: bool):
         dialogo = Gtk.Dialog(title="Configurações do Sistema", transient_for=self, modal=True)
+        dialogo.set_default_size(480, 620)
         if AVATAR_PATH.exists():
             dialogo.set_icon_from_file(str(AVATAR_PATH))
         dialogo.add_buttons(Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL, Gtk.STOCK_SAVE, Gtk.ResponseType.OK)
-        box = dialogo.get_content_area()
-        box.set_border_width(16)
-        box.set_spacing(10)
+
+        area_conteudo = dialogo.get_content_area()
+        area_conteudo.set_border_width(8)
+
+        scroll_dialog = Gtk.ScrolledWindow()
+        scroll_dialog.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        scroll_dialog.set_propagate_natural_height(True)
+        area_conteudo.pack_start(scroll_dialog, True, True, 0)
+
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        box.set_border_width(12)
+        scroll_dialog.add(box)
 
         # 1. Cérebro da IA (Provedor)
         box.add(Gtk.Label(label="<b>🧠 Cérebro da IA (Provedor):</b>", use_markup=True, xalign=0))
@@ -229,6 +251,62 @@ class JanelaPrincipal(Gtk.Window):
         combo_ollama_model.get_child().set_text(modelo_salvo)
         box.add(combo_ollama_model)
 
+        # Baixar novo modelo do Ollama direto pela interface
+        box.add(Gtk.Label(label="Baixar novo modelo (ex: deepseek-r1:8b, mistral):", xalign=0))
+        box_pull = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        entrada_pull = Gtk.Entry()
+        entrada_pull.set_placeholder_text("Nome do modelo...")
+        btn_pull = Gtk.Button(label="Baixar Modelo")
+        box_pull.pack_start(entrada_pull, True, True, 0)
+        box_pull.pack_end(btn_pull, False, False, 0)
+        box.add(box_pull)
+
+        progresso_pull = Gtk.ProgressBar()
+        progresso_pull.set_no_show_all(True)
+        lbl_status_pull = Gtk.Label(xalign=0)
+        lbl_status_pull.set_no_show_all(True)
+        box.add(progresso_pull)
+        box.add(lbl_status_pull)
+
+        def _executar_pull(*_a):
+            mod_alvo = entrada_pull.get_text().strip()
+            if not mod_alvo:
+                return
+            btn_pull.set_sensitive(False)
+            progresso_pull.set_fraction(0.0)
+            progresso_pull.show()
+            lbl_status_pull.set_text(f"Iniciando download de {mod_alvo}...")
+            lbl_status_pull.show()
+
+            def _thread_pull():
+                def _progresso(status_txt, fracao):
+                    GLib.idle_add(lbl_status_pull.set_text, status_txt)
+                    if fracao > 0:
+                        GLib.idle_add(progresso_pull.set_fraction, fracao)
+                    else:
+                        GLib.idle_add(progresso_pull.pulse)
+
+                try:
+                    c = OllamaClient(host=entrada_ollama_host.get_text().strip() or config.DEFAULT_OLLAMA_HOST)
+                    c.puxar_modelo(mod_alvo, callback_progresso=_progresso)
+                    def _sucesso():
+                        lbl_status_pull.set_text(f"✅ {mod_alvo} baixado com sucesso!")
+                        progresso_pull.set_fraction(1.0)
+                        btn_pull.set_sensitive(True)
+                        combo_ollama_model.append(mod_alvo, mod_alvo)
+                        combo_ollama_model.get_child().set_text(mod_alvo)
+                        sons.tocar_sucesso(self._config.get("sons_ativados", True))
+                    GLib.idle_add(_sucesso)
+                except Exception as err:
+                    def _erro():
+                        lbl_status_pull.set_text(f"⚠️ Erro: {err}")
+                        btn_pull.set_sensitive(True)
+                    GLib.idle_add(_erro)
+
+            threading.Thread(target=_thread_pull, daemon=True).start()
+
+        btn_pull.connect("clicked", _executar_pull)
+
         # Status Ollama
         online = client_test.testar_conexao()
         status_txt = "🟢 Ollama conectado e ativo" if online else "🟡 Ollama não conectado (execute 'ollama serve')"
@@ -254,8 +332,16 @@ class JanelaPrincipal(Gtk.Window):
 
         box.add(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
 
-        # 4. Voz do Neo
-        box.add(Gtk.Label(label="<b>🕶️ Voz do Neo:</b>", use_markup=True, xalign=0))
+        # 4. Voz do Neo e Motor de TTS
+        box.add(Gtk.Label(label="<b>🗣️ Motor de Fala (TTS) e Voz:</b>", use_markup=True, xalign=0))
+        box.add(Gtk.Label(label="Motor de Síntese de Voz:", xalign=0))
+        combo_motor_tts = Gtk.ComboBoxText()
+        for id_m, nome_m in config.MOTORES_TTS_DISPONIVEIS:
+            combo_motor_tts.append(id_m, nome_m)
+        combo_motor_tts.set_active_id(self._config.get("motor_tts", config.DEFAULT_MOTOR_TTS))
+        box.add(combo_motor_tts)
+
+        box.add(Gtk.Label(label="Perfil de Voz:", xalign=0))
         combo_voz = Gtk.ComboBoxText()
         for id_voz, nome in config.VOZES_DISPONIVEIS:
             combo_voz.append(id_voz, nome)
@@ -265,14 +351,77 @@ class JanelaPrincipal(Gtk.Window):
         combo_voz.set_active_id(voz_atual)
         box.add(combo_voz)
 
+        box.add(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
+
+        # 5. Frase de Ativação (Wake Word)
+        box.add(Gtk.Label(label="<b>👂 Frase de Ativação (Wake Word):</b>", use_markup=True, xalign=0))
+        combo_wake = Gtk.ComboBoxText.new_with_entry()
+        for ww in config.WAKE_WORDS_PRESETS:
+            combo_wake.append(ww, ww)
+        wake_atual = self._config.get("palavra_ativacao", config.DEFAULT_WAKE_WORD)
+        combo_wake.get_child().set_text(wake_atual)
+        box.add(combo_wake)
+
+        box.add(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
+
+        # 6. Atalho Global de Teclado (Push-to-Talk)
+        box.add(Gtk.Label(label="<b>⌨️ Atalho Global de Teclado (Push-to-Talk):</b>", use_markup=True, xalign=0))
+        box.add(Gtk.Label(
+            label="<small>Para ativar o Neo via tecla de atalho sem falar a frase de ativação, associe uma tecla nas configurações do sistema ao comando:</small>\n<code>acordaneo --wake</code>",
+            use_markup=True,
+            xalign=0,
+        ))
+
+        box.add(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
+
+        # 7. Feedback Sonoro (Chimes)
+        box.add(Gtk.Label(label="<b>🔊 Feedback Sonoro:</b>", use_markup=True, xalign=0))
+        check_sons = Gtk.CheckButton(label="Habilitar indicadores sonoros (Chimes de ativação e status)")
+        check_sons.set_active(self._config.get("sons_ativados", True))
+        box.add(check_sons)
+
+        box.add(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
+
+        # 8. Personalização do Prompt de Sistema (System Prompt)
+        box.add(Gtk.Label(label="<b>📜 Instruções do Sistema (Prompt da IA):</b>", use_markup=True, xalign=0))
+        box.add(Gtk.Label(
+            label="<small>Personalize o comportamento, tom e regras de resposta da IA:</small>",
+            use_markup=True,
+            xalign=0,
+        ))
+
+        scroll_prompt = Gtk.ScrolledWindow()
+        scroll_prompt.set_min_content_height(100)
+        scroll_prompt.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+        scroll_prompt.set_shadow_type(Gtk.ShadowType.IN)
+
+        textview_prompt = Gtk.TextView()
+        textview_prompt.set_wrap_mode(Gtk.WrapMode.WORD)
+        textview_prompt.set_left_margin(8)
+        textview_prompt.set_right_margin(8)
+        textview_prompt.set_top_margin(6)
+        textview_prompt.set_bottom_margin(6)
+        buffer_prompt = textview_prompt.get_buffer()
+        buffer_prompt.set_text(self._config.get("system_prompt", config.DEFAULT_SYSTEM_PROMPT))
+        scroll_prompt.add(textview_prompt)
+        box.add(scroll_prompt)
+
+        btn_reset_prompt = Gtk.Button(label="Restaurar Prompt Padrão")
+        btn_reset_prompt.set_halign(Gtk.Align.START)
+        btn_reset_prompt.connect(
+            "clicked", lambda *_a: buffer_prompt.set_text(config.DEFAULT_SYSTEM_PROMPT)
+        )
+        box.add(btn_reset_prompt)
+
         if obrigatorio:
+            box.add(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
             aviso = Gtk.Label(
                 label="Bem-vindo ao Acorda, Neo! Verifique as configurações para começar."
             )
             aviso.set_line_wrap(True)
             box.add(aviso)
 
-        box.show_all()
+        dialogo.show_all()
         resposta = dialogo.run()
 
         if resposta == Gtk.ResponseType.OK:
@@ -284,7 +433,18 @@ class JanelaPrincipal(Gtk.Window):
 
             self._config["anthropic_api_key"] = entrada_chave.get_text().strip()
             self._config["modelo"] = combo_claude_model.get_active_id() or config.DEFAULT_MODEL
+            self._config["motor_tts"] = combo_motor_tts.get_active_id() or config.DEFAULT_MOTOR_TTS
             self._config["voz"] = combo_voz.get_active_id() or config.DEFAULT_VOICE
+
+            wake_escolhida = combo_wake.get_active_id() or combo_wake.get_child().get_text().strip()
+            self._config["palavra_ativacao"] = wake_escolhida or config.DEFAULT_WAKE_WORD
+
+            self._config["sons_ativados"] = check_sons.get_active()
+
+            inicio, fim = buffer_prompt.get_bounds()
+            prompt_digitado = buffer_prompt.get_text(inicio, fim, True).strip()
+            self._config["system_prompt"] = prompt_digitado or config.DEFAULT_SYSTEM_PROMPT
+
             config.salvar(self._config)
 
             self._atualizar_subtitulo_header()
@@ -315,6 +475,30 @@ class JanelaPrincipal(Gtk.Window):
         else:
             self.present()
 
+    def _ao_comando_ipc(self, comando: str):
+        """Processa mensagens recebidas pelo socket IPC (ex: acordaneo --wake)."""
+        cmd = comando.strip().upper()
+        if cmd in ("WAKE", "PUSH_TO_TALK", "PTT"):
+            GLib.idle_add(self.ativar_push_to_talk)
+        elif cmd == "TOGGLE":
+            GLib.idle_add(self._alternar_visibilidade_janela)
+        elif cmd == "PRESENT":
+            GLib.idle_add(self.present)
+
+    def ativar_push_to_talk(self):
+        """Acorda o assistente imediatamente via atalho global de teclado / Push-to-Talk."""
+        self.present()
+        sons.tocar_wake(self._config.get("sons_ativados", True))
+        if not self._ocupado:
+            self._ocupado = True
+            threading.Thread(target=self._executar_ciclo_push_to_talk, daemon=True).start()
+
+    def _executar_ciclo_push_to_talk(self):
+        try:
+            self._processar_ciclo_pergunta()
+        finally:
+            self._ocupado = False
+
     def _sair_aplicativo(self):
         self._escutando = False
         tts.parar()
@@ -338,7 +522,8 @@ class JanelaPrincipal(Gtk.Window):
                 continue
 
             try:
-                GLib.idle_add(self._definir_status, "👂 Diga \"Acorda, Neo\" pra começar.")
+                palavra_chave = self._config.get("palavra_ativacao", config.DEFAULT_WAKE_WORD)
+                GLib.idle_add(self._definir_status, f'👂 Diga "{palavra_chave}" pra começar.')
                 clipe = stt.gravar_clipe(DURACAO_CLIPE_ATIVACAO)
 
                 if not self._escutando:
@@ -349,8 +534,9 @@ class JanelaPrincipal(Gtk.Window):
                     time.sleep(1.0)
                     continue
 
-                if stt.contem_palavra_ativacao(clipe):
+                if stt.contem_palavra_ativacao(clipe, palavra_chave=palavra_chave):
                     self._ocupado = True
+                    sons.tocar_wake(self._config.get("sons_ativados", True))
                     self._processar_ciclo_pergunta()
                     self._ocupado = False
             except Exception:
@@ -404,6 +590,7 @@ class JanelaPrincipal(Gtk.Window):
                 return ""
 
             GLib.idle_add(self._definir_status, "⏳ Entendendo...")
+            sons.tocar_think(self._config.get("sons_ativados", True))
             fd, caminho_junto = tempfile.mkstemp(suffix=".wav", prefix="pergunta_completa_")
             os.close(fd)
             destino_junto = Path(caminho_junto)
@@ -423,7 +610,7 @@ class JanelaPrincipal(Gtk.Window):
 
     def _reproduzir_resposta_com_interrupcao(self, caminho_audio: Path) -> bool:
         """Reproduz a resposta do Neo enquanto escuta trechos curtos para interrupção (Barge-in).
-        Retorna True se o usuário chamou 'Acorda, Neo' ou pediu para parar durante a fala,
+        Retorna True se o usuário chamou a frase de ativação ou pediu para parar durante a fala,
         ou False se a reprodução terminou normalmente.
         """
         proc = tts.iniciar_reproducao(caminho_audio)
@@ -431,6 +618,7 @@ class JanelaPrincipal(Gtk.Window):
             return False
 
         interrompido = False
+        palavra_chave = self._config.get("palavra_ativacao", config.DEFAULT_WAKE_WORD)
         try:
             while self._escutando and proc.poll() is None:
                 clipe = stt.gravar_clipe(DURACAO_CLIPE_INTERRUPCAO)
@@ -444,7 +632,7 @@ class JanelaPrincipal(Gtk.Window):
                     time.sleep(0.1)
                     continue
 
-                if stt.contem_palavra_ativacao(clipe, durante_fala=True):
+                if stt.contem_palavra_ativacao(clipe, durante_fala=True, palavra_chave=palavra_chave):
                     print("[window] ⚡ Interrupção por voz detectada! Parando fala do Neo...")
                     tts.parar()
                     interrompido = True
@@ -485,6 +673,58 @@ class JanelaPrincipal(Gtk.Window):
             self._chat_box.remove(child)
         self._definir_status("[ SYSTEM ONLINE ]  Diga \"Acorda, Neo\"")
 
+    def _exportar_conversa_ui(self):
+        """Exporta o histórico da conversa para um arquivo Markdown (.md)."""
+        if not self._historico:
+            self._definir_status("💬 Nenhuma conversa registrada para exportar.")
+            return
+
+        dialogo = Gtk.FileChooserDialog(
+            title="Exportar Conversa para Markdown",
+            transient_for=self,
+            action=Gtk.FileChooserAction.SAVE,
+        )
+        dialogo.add_buttons(
+            Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL,
+            Gtk.STOCK_SAVE, Gtk.ResponseType.OK,
+        )
+        dialogo.set_do_overwrite_confirmation(True)
+
+        docs = Path.home() / "Documents"
+        if not docs.exists():
+            docs = Path.home()
+        dialogo.set_current_folder(str(docs))
+
+        agora = time.strftime("%Y-%m-%d_%H-%M-%S")
+        dialogo.set_current_name(f"conversa_neo_{agora}.md")
+
+        filtro = Gtk.FileFilter()
+        filtro.set_name("Arquivos Markdown (*.md)")
+        filtro.add_pattern("*.md")
+        dialogo.add_filter(filtro)
+
+        resposta = dialogo.run()
+        if resposta == Gtk.ResponseType.OK:
+            caminho_escolhido = Path(dialogo.get_filename())
+            if not caminho_escolhido.name.endswith(".md"):
+                caminho_escolhido = caminho_escolhido.with_suffix(".md")
+
+            provedor = self._config.get("provedor", config.DEFAULT_PROVEDOR)
+            if provedor == config.PROVEDOR_OLLAMA:
+                mod = self._config.get("ollama_model", config.DEFAULT_OLLAMA_MODEL)
+                info = f"Ollama Local ({mod})"
+            else:
+                mod = self._config.get("modelo", config.DEFAULT_MODEL)
+                info = f"Claude ({mod})"
+
+            destino = sistema.exportar_historico_markdown(
+                self._historico, caminho_destino=caminho_escolhido, provedor_info=info
+            )
+            sons.tocar_sucesso(self._config.get("sons_ativados", True))
+            self._definir_status(f"💾 Conversa salva em: {destino.name}")
+
+        dialogo.destroy()
+
     def _processar_ciclo_pergunta(self):
         try:
             # 1. Pausa o Spotify / reprodutores de mídia ativos para não competir com o microfone
@@ -503,13 +743,14 @@ class JanelaPrincipal(Gtk.Window):
                     GLib.idle_add(self._adicionar_balao, texto_usuario, "usuario")
 
                     # 2. Comando de voz para limpar memória / novo chat
+                    motor_tts = self._config.get("motor_tts", config.DEFAULT_MOTOR_TTS)
                     if self._checar_comando_limpar_conversa(texto_usuario):
                         self._limpar_historico_conversa()
                         resposta = "Histórico de conversa apagado. Memória reiniciada, Neo."
                         GLib.idle_add(self._adicionar_balao, resposta, "assistente")
                         GLib.idle_add(self._definir_status, "🗣️ Falando...", "falando")
                         voz = self._config.get("voz", config.DEFAULT_VOICE)
-                        caminho_audio = sintetizar(resposta, voz)
+                        caminho_audio = sintetizar(resposta, voz, motor=motor_tts)
                         self._reproduzir_resposta_com_interrupcao(caminho_audio)
                         break
 
@@ -519,11 +760,21 @@ class JanelaPrincipal(Gtk.Window):
                         GLib.idle_add(self._adicionar_balao, msg_midia, "assistente")
                         GLib.idle_add(self._definir_status, "🗣️ Falando...", "falando")
                         voz = self._config.get("voz", config.DEFAULT_VOICE)
-                        caminho_audio = sintetizar(msg_midia, voz)
+                        caminho_audio = sintetizar(msg_midia, voz, motor=motor_tts)
                         self._reproduzir_resposta_com_interrupcao(caminho_audio)
                         break
 
-                    # 4. Consulta ao cérebro da IA (mantendo memória multi-turn na conversa)
+                    # 4. Comandos de automação do Linux (volume, aplicativos, data/hora, bateria e exportação)
+                    reconhecido_sis, msg_sis = sistema.executar_comando_sistema(texto_usuario, self._historico)
+                    if reconhecido_sis:
+                        GLib.idle_add(self._adicionar_balao, msg_sis, "assistente")
+                        GLib.idle_add(self._definir_status, "🗣️ Falando...", "falando")
+                        voz = self._config.get("voz", config.DEFAULT_VOICE)
+                        caminho_audio = sintetizar(msg_sis, voz, motor=motor_tts)
+                        self._reproduzir_resposta_com_interrupcao(caminho_audio)
+                        break
+
+                    # 5. Consulta ao cérebro da IA (mantendo memória multi-turn na conversa)
                     provedor = self._config.get("provedor", config.DEFAULT_PROVEDOR)
                     if provedor == config.PROVEDOR_OLLAMA:
                         modelo_nome = self._config.get("ollama_model", config.DEFAULT_OLLAMA_MODEL)
@@ -540,10 +791,11 @@ class JanelaPrincipal(Gtk.Window):
                         self._historico = self._historico[-20:]
 
                     GLib.idle_add(self._adicionar_balao, resposta, "assistente")
-                    GLib.idle_add(self._definir_status, "🗣️ Falando... (Diga \"Acorda, Neo\" para interromper)", "falando")
+                    palavra_gatilho = self._config.get("palavra_ativacao", config.DEFAULT_WAKE_WORD)
+                    GLib.idle_add(self._definir_status, f"🗣️ Falando... (Diga \"{palavra_gatilho}\" para interromper)", "falando")
 
                     voz = self._config.get("voz", config.DEFAULT_VOICE)
-                    caminho_audio = sintetizar(resposta, voz)
+                    caminho_audio = sintetizar(resposta, voz, motor=motor_tts)
                     interrompido = self._reproduzir_resposta_com_interrupcao(caminho_audio)
 
                     if interrompido:
@@ -557,20 +809,34 @@ class JanelaPrincipal(Gtk.Window):
                     GLib.idle_add(self._definir_status, f"⚠️ Erro: {exc}")
                     break
         finally:
-            # 5. Retoma automaticamente a mídia pausada quando a conversa termina
+            # 6. Retoma automaticamente a mídia pausada quando a conversa termina
             mpris.retomar_apos_conversa()
 
     def _perguntar_ollama(self, texto_usuario: str) -> str:
         host = self._config.get("ollama_host", config.DEFAULT_OLLAMA_HOST)
         model = self._config.get("ollama_model", config.DEFAULT_OLLAMA_MODEL)
-        if self._ollama is None or self._ollama.host != host or self._ollama.model != model:
-            self._ollama = OllamaClient(host=host, model=model)
+        prompt = self._config.get("system_prompt", config.DEFAULT_SYSTEM_PROMPT)
+        if (
+            self._ollama is None
+            or self._ollama.host != host
+            or self._ollama.model != model
+            or getattr(self._ollama, "system_prompt", None) != prompt
+        ):
+            self._ollama = OllamaClient(host=host, model=model, system_prompt=prompt)
         return self._ollama.perguntar(texto_usuario, historico=self._historico)
 
     def _perguntar_claude(self, texto_usuario: str) -> str:
-        if self._claude is None:
+        api_key = self._config.get("anthropic_api_key", "")
+        model = self._config.get("modelo", config.DEFAULT_MODEL)
+        prompt = self._config.get("system_prompt", config.DEFAULT_SYSTEM_PROMPT)
+        if (
+            self._claude is None
+            or getattr(self._claude, "_model", None) != model
+            or getattr(self._claude, "system_prompt", None) != prompt
+        ):
             self._claude = ClaudeClient(
-                api_key=self._config.get("anthropic_api_key", ""),
-                model=self._config.get("modelo", config.DEFAULT_MODEL),
+                api_key=api_key,
+                model=model,
+                system_prompt=prompt,
             )
         return self._claude.perguntar(texto_usuario, historico=self._historico)

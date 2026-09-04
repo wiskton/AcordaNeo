@@ -234,22 +234,21 @@ def transcrever(caminho_wav: Optional[Path], idioma: str = "pt") -> str:
 
 
 def contem_palavra_ativacao(
-    caminho_wav: Optional[Path], idioma: str = "pt", durante_fala: bool = False
+    caminho_wav: Optional[Path],
+    idioma: str = "pt",
+    durante_fala: bool = False,
+    palavra_chave: str = "Acorda, Neo",
 ) -> bool:
-    """Checa (com o modelo leve) se o trecho contém a frase de ativação ou pedido de parada.
-
-    "Neo" é um nome curto e incomum em português — o Whisper às vezes ouve
-    coisas parecidas foneticamente (ex.: "acorda-lhe" em vez de "acorda,
-    neo"). Por isso: (1) damos uma dica de vocabulário via initial_prompt,
-    e (2) aceitamos variações comuns ("neo", "acorda", "acorde", "néo").
-
-    Se durante_fala=True (Barge-in): só interrompe se houver gatilho explícito
-    como "acorda", "acorde", "pare", "para", "cancela", evitando que menções
-    normais ao nome "Neo" durante a própria resposta causem interrupções acidentais.
-    """
+    """Checa (com o modelo leve) se o trecho contém a frase de ativação ou pedido de parada."""
     if caminho_wav is None:
         return False
-    dica = "Acorda, Neo." if not durante_fala else "Acorda Neo, pare, para, silêncio."
+
+    palavra_alvo = palavra_chave.strip() if palavra_chave else "Acorda, Neo"
+    dica = (
+        f"{palavra_alvo}."
+        if not durante_fala
+        else f"{palavra_alvo}, pare, para, silêncio."
+    )
     texto = _transcrever_com(
         _get_modelo_ativacao(), caminho_wav, idioma, dica_vocabulario=dica
     )
@@ -275,10 +274,26 @@ def contem_palavra_ativacao(
         }
         if palavras.intersection(gatilhos_interrupcao):
             return True
-        if "neo" in palavras and ("ei" in palavras or "oi" in palavras or "alô" in palavras or "alo" in palavras or "olá" in palavras or "ola" in palavras):
+        tokens_alvo = set(
+            palavra_alvo.lower()
+            .replace(",", " ")
+            .replace(".", " ")
+            .split()
+        )
+        if tokens_alvo and tokens_alvo.issubset(palavras):
             return True
         return False
 
-    gatilhos = {"neo", "néo", "nêo", "acorda", "acorde", "corda"}
-    return bool(palavras.intersection(gatilhos))
+    tokens_gatilho = set(
+        palavra_alvo.lower()
+        .replace(",", " ")
+        .replace(".", " ")
+        .replace("!", " ")
+        .replace("?", " ")
+        .split()
+    )
+    if "neo" in tokens_gatilho:
+        tokens_gatilho.update({"néo", "nêo", "acorda", "acorde", "corda"})
+
+    return bool(palavras.intersection(tokens_gatilho))
 

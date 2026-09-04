@@ -23,9 +23,15 @@ class OllamaError(RuntimeError):
 
 
 class OllamaClient:
-    def __init__(self, host: str = "http://localhost:11434", model: str = "llama3.2:3b"):
+    def __init__(
+        self,
+        host: str = "http://localhost:11434",
+        model: str = "llama3.2:3b",
+        system_prompt: str = None,
+    ):
         self.host = host.rstrip("/")
         self.model = model
+        self.system_prompt = system_prompt or SYSTEM_PROMPT
         self._historico = []
 
     def testar_conexao(self) -> bool:
@@ -50,11 +56,42 @@ class OllamaClient:
         except Exception:
             return []
 
+    def puxar_modelo(self, modelo: str, callback_progresso=None):
+        """Faz o download de um modelo do repositório Ollama com streaming de progresso."""
+        url = f"{self.host}/api/pull"
+        payload = json.dumps({"name": modelo, "stream": True}).encode("utf-8")
+        req = urllib.request.Request(
+            url,
+            data=payload,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=1800.0) as resp:
+                for linha in resp:
+                    if not linha:
+                        continue
+                    try:
+                        dado = json.loads(linha.decode("utf-8"))
+                        status = dado.get("status", "")
+                        total = dado.get("total", 0)
+                        completed = dado.get("completed", 0)
+                        fracao = (completed / total) if (total and total > 0) else 0.0
+                        if callback_progresso:
+                            callback_progresso(status, fracao)
+                    except json.JSONDecodeError:
+                        pass
+        except urllib.error.URLError as e:
+            raise OllamaError(f"Erro ao conectar ao Ollama para baixar {modelo}: {e}") from e
+        except Exception as e:
+            raise OllamaError(f"Falha no download do modelo {modelo}: {e}") from e
+
     def perguntar(self, pergunta: str, historico: list = None) -> str:
         """Envia a pergunta ao modelo local do Ollama mantendo o histórico de conversa."""
         mensagens_historico = list(historico) if historico is not None else list(self._historico)
+        prompt_sistema = self.system_prompt or SYSTEM_PROMPT
         mensagens = (
-            [{"role": "system", "content": SYSTEM_PROMPT}]
+            [{"role": "system", "content": prompt_sistema}]
             + mensagens_historico
             + [{"role": "user", "content": pergunta}]
         )

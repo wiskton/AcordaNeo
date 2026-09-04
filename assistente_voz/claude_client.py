@@ -16,11 +16,12 @@ SYSTEM_PROMPT = (
 
 
 class ClaudeClient:
-    def __init__(self, api_key: str, model: str):
+    def __init__(self, api_key: str, model: str, system_prompt: str = None):
         if not api_key:
             raise ValueError("Chave da API da Anthropic não configurada.")
         self._client = Anthropic(api_key=api_key)
         self._model = model
+        self.system_prompt = system_prompt or SYSTEM_PROMPT
         self._historico = []
 
     def perguntar(self, pergunta: str, historico: list = None) -> str:
@@ -31,7 +32,7 @@ class ClaudeClient:
         resposta = self._client.messages.create(
             model=self._model,
             max_tokens=1024,
-            system=SYSTEM_PROMPT,
+            system=self.system_prompt or SYSTEM_PROMPT,
             messages=mensagens,
         )
 

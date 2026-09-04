@@ -105,10 +105,12 @@ class TrayManager:
         ao_abrir_preferencias: Callable[[], None],
         ao_sair: Callable[[], None],
         icone_path: Optional[Path] = None,
+        ao_exportar_conversa: Optional[Callable[[], None]] = None,
     ):
         self._ao_alternar = ao_alternar_janela
         self._ao_preferencias = ao_abrir_preferencias
         self._ao_sair = ao_sair
+        self._ao_exportar = ao_exportar_conversa
         self._icone_path = icone_path
 
         self._status_texto = "Diga \"Acorda, Neo\" pra começar"
@@ -231,6 +233,11 @@ class TrayManager:
         item_pref.connect("activate", lambda *_a: self._ao_preferencias())
         menu.append(item_pref)
 
+        if self._ao_exportar:
+            item_exp = Gtk.MenuItem(label="Exportar Conversa (Markdown)...")
+            item_exp.connect("activate", lambda *_a: self._ao_exportar())
+            menu.append(item_exp)
+
         menu.append(Gtk.SeparatorMenuItem())
 
         item_sair = Gtk.MenuItem(label="Encerrar o aplicativo")
@@ -284,7 +291,7 @@ class TrayManager:
 
     def _obter_itens_menu(self):
         status_label = f"Neo: {self._status_texto}"
-        return {
+        itens = {
             100: {
                 "label": GLib.Variant("s", status_label),
                 "enabled": GLib.Variant("b", False),
@@ -310,14 +317,26 @@ class TrayManager:
                 "visible": GLib.Variant("b", True),
             },
         }
+        if self._ao_exportar:
+            itens[5] = {
+                "label": GLib.Variant("s", "Exportar Conversa (Markdown)..."),
+                "enabled": GLib.Variant("b", True),
+                "visible": GLib.Variant("b", True),
+            }
+        return itens
 
     def _handle_menu_call(self, conn, sender, path, iface, method, params, inv):
         menu_items = self._obter_itens_menu()
 
         if method == "GetLayout":
+            ids_exibir = [100, 1, 2]
+            if self._ao_exportar:
+                ids_exibir.append(5)
+            ids_exibir.extend([3, 4])
             children = [
                 GLib.Variant("(ia{sv}av)", (item_id, menu_items[item_id], []))
-                for item_id in [100, 1, 2, 3, 4]
+                for item_id in ids_exibir
+                if item_id in menu_items
             ]
             root = (0, {"children-display": GLib.Variant("s", "submenu")}, children)
             inv.return_value(GLib.Variant("(u(ia{sv}av))", (self._menu_revision, root)))
@@ -355,6 +374,8 @@ class TrayManager:
                     GLib.idle_add(self._ao_alternar)
                 elif item_id == 2:
                     GLib.idle_add(self._ao_preferencias)
+                elif item_id == 5 and self._ao_exportar:
+                    GLib.idle_add(self._ao_exportar)
                 elif item_id == 4:
                     GLib.idle_add(self._ao_sair)
             inv.return_value(None)

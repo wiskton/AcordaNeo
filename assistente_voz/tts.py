@@ -41,11 +41,26 @@ async def _sintetizar_async(texto: str, identificador_voz: str, destino: Path):
     await comunicador.save(str(destino))
 
 
-def sintetizar(texto: str, voz: str) -> Path:
-    """Gera um MP3 com a fala e devolve o caminho do arquivo."""
-    destino = Path(tempfile.mkstemp(suffix=".mp3", prefix="assistente_voz_")[1])
-    asyncio.run(_sintetizar_async(texto, voz, destino))
-    return destino
+def sintetizar(texto: str, voz: str = "neo", motor: str = "edge") -> Path:
+    """Gera um arquivo de áudio (MP3 ou WAV) com a fala e devolve o caminho do arquivo."""
+    if motor == "piper":
+        try:
+            from . import piper_tts
+            return piper_tts.sintetizar(texto)
+        except Exception as e:
+            print(f"[tts] Falha no Piper TTS ({e}), tentando Edge-TTS...")
+
+    try:
+        destino = Path(tempfile.mkstemp(suffix=".mp3", prefix="assistente_voz_")[1])
+        asyncio.run(_sintetizar_async(texto, voz, destino))
+        return destino
+    except Exception as exc:
+        print(f"[tts] Erro no Edge-TTS ({exc}), tentando fallback para Piper local...")
+        try:
+            from . import piper_tts
+            return piper_tts.sintetizar(texto)
+        except Exception as e2:
+            raise RuntimeError(f"Nenhum motor de TTS pôde sintetizar o áudio: {e2}") from exc
 
 
 def iniciar_reproducao(caminho_audio: Path) -> Optional[subprocess.Popen]:

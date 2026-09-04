@@ -2,7 +2,11 @@
 __pycache__/
 *.pyc
 *.wav
+!assets/sons/*.wav
 *.mp3
+*.sock
+assets/piper/*.onnx
+assets/piper/*.onnx.json
 
 # Chave da API e preferências ficam em ~/.config/assistente-voz/, nunca aqui.
 .env

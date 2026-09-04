@@ -1,0 +1,15 @@
+[Unit]
+Description=Acorda, Neo - Assistente de Voz com IA (Ollama & Claude)
+Documentation=https://github.com/wiskton/acordaneo
+After=graphical-session.target sound.target pipewire.service pulseaudio.service
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/acordaneo
+Restart=on-failure
+RestartSec=3
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=graphical-session.target

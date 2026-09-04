@@ -1,0 +1,57 @@
+# Maintainer: Willem <willem@users.noreply.github.com>
+pkgname=acordaneo
+pkgver=0.2.0
+pkgrel=1
+pkgdesc="Assistente de voz em português com IA local (Ollama) ou em nuvem (Claude)"
+arch=('x86_64' 'aarch64')
+url="https://github.com/wiskton/acordaneo"
+license=('MIT')
+depends=(
+    'python'
+    'python-gobject'
+    'gtk3'
+    'ffmpeg'
+    'alsa-utils'
+    'libpulse'
+)
+optdepends=(
+    'ollama: Para execução de modelos de IA locais offline (Llama 3, Gemma, etc.)'
+    'piper-tts: Síntese de voz neural 100% offline com baixa latência'
+    'python-anthropic: Suporte para modelo Claude Sonnet na nuvem'
+    'python-edge-tts: Síntese de voz neural natural online gratuita'
+)
+source=("acordaneo-${pkgver}.tar.gz::https://github.com/wiskton/acordaneo/archive/refs/tags/v${pkgver}.tar.gz")
+sha256sums=('SKIP')
+
+package() {
+    cd "${srcdir}/${pkgname}-${pkgver}" 2>/dev/null || cd "${srcdir}/${pkgname}"
+
+    # Diretórios de destino
+    install -dm755 "${pkgdir}/usr/share/${pkgname}"
+    install -dm755 "${pkgdir}/usr/bin"
+    install -dm755 "${pkgdir}/usr/share/applications"
+    install -dm755 "${pkgdir}/usr/share/icons/hicolor/256x256/apps"
+    install -dm755 "${pkgdir}/usr/lib/systemd/user"
+
+    # Código-fonte da aplicação
+    cp -r assistente_voz "${pkgdir}/usr/share/${pkgname}/"
+    cp -r assets "${pkgdir}/usr/share/${pkgname}/"
+    install -Dm644 main.py "${pkgdir}/usr/share/${pkgname}/main.py"
+    install -Dm644 requirements.txt "${pkgdir}/usr/share/${pkgname}/requirements.txt"
+
+    # Lançador /usr/bin/acordaneo
+    cat << 'EOF' > "${pkgdir}/usr/bin/acordaneo"
+#!/usr/bin/env bash
+exec python3 /usr/share/acordaneo/main.py "$@"
+EOF
+    chmod 755 "${pkgdir}/usr/bin/acordaneo"
+
+    # Desktop entry e ícone
+    install -Dm644 acordaneo.desktop "${pkgdir}/usr/share/applications/acordaneo.desktop"
+    install -Dm644 assets/avatar.png "${pkgdir}/usr/share/icons/hicolor/256x256/apps/acordaneo.png"
+
+    # Systemd user service
+    if [ -f "packaging/systemd/acordaneo.service" ]; then
+        install -Dm644 packaging/systemd/acordaneo.service "${pkgdir}/usr/lib/systemd/user/acordaneo.service"
+    fi
+}

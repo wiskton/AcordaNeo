@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+set -e
+
+# Descobre o diretório do AppDir
+HERE="$(dirname "$(readlink -f "${0}")")"
+
+export PATH="${HERE}/usr/bin:${PATH}"
+export LD_LIBRARY_PATH="${HERE}/usr/lib:${HERE}/usr/lib/x86_64-linux-gnu:${LD_LIBRARY_PATH}"
+export PYTHONHOME="${HERE}/usr"
+export PYTHONPATH="${HERE}/usr/lib/python3/dist-packages:${HERE}/usr/share/acordaneo:${PYTHONPATH}"
+export GI_TYPELIB_PATH="${HERE}/usr/lib/x86_64-linux-gnu/girepository-1.0:${HERE}/usr/lib/girepository-1.0:${GI_TYPELIB_PATH}"
+export XDG_DATA_DIRS="${HERE}/usr/share:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
+
+# Se houver Python embarcado no AppDir, usa ele. Caso contrário, usa o do sistema.
+if [ -x "${HERE}/usr/bin/python3" ]; then
+    PYTHON_BIN="${HERE}/usr/bin/python3"
+else
+    PYTHON_BIN="python3"
+fi
+
+exec "${PYTHON_BIN}" "${HERE}/usr/share/acordaneo/main.py" "$@"

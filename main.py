@@ -218,13 +218,26 @@ separator {
 
 
 def main():
+    args = set(sys.argv[1:])
+    quer_wake = bool(args.intersection({"--wake", "-w", "--push-to-talk", "--ptt"}))
+    quer_toggle = bool(args.intersection({"--toggle", "-t"}))
+
     if not singleinstance.adquirir():
+        if quer_wake:
+            if singleinstance.enviar_comando_instancia("WAKE"):
+                sys.exit(0)
+        elif quer_toggle:
+            if singleinstance.enviar_comando_instancia("TOGGLE"):
+                sys.exit(0)
+        else:
+            if singleinstance.enviar_comando_instancia("PRESENT"):
+                sys.exit(0)
+
         dialogo = Gtk.MessageDialog(
             message_type=Gtk.MessageType.WARNING,
             buttons=Gtk.ButtonsType.OK,
             text="O Acorda, Neo já está rodando.",
-            secondary_text="Só pode ter uma instância aberta por vez (as duas ficariam "
-            "brigando pelo microfone). Feche a outra janela antes de abrir de novo.",
+            secondary_text="Só pode ter uma instância aberta por vez. A janela principal foi trazida para a frente.",
         )
         if AVATAR_PATH.exists():
             dialogo.set_icon_from_file(str(AVATAR_PATH))
@@ -245,6 +258,8 @@ def main():
 
     janela = JanelaPrincipal()
     janela.show_all()
+    if quer_wake:
+        GLib.idle_add(janela.ativar_push_to_talk)
     Gtk.main()
 
 

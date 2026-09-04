@@ -15,6 +15,7 @@
   <img src="https://img.shields.io/badge/LLM_Option-Claude_3.5_Sonnet-D97706?style=flat&logo=anthropic&logoColor=white" alt="Claude" />
   <img src="https://img.shields.io/badge/STT-faster--whisper-blue?style=flat" alt="faster-whisper" />
   <img src="https://img.shields.io/badge/TTS-edge--tts-purple?style=flat" alt="edge-tts" />
+  <img src="https://img.shields.io/badge/TTS_Offline-Piper_TTS-red?style=flat" alt="Piper TTS" />
   <img src="https://img.shields.io/badge/Platform-Linux-FCC624?style=flat&logo=linux&logoColor=black" alt="Linux" />
   <img src="https://img.shields.io/badge/License-MIT-green.svg?style=flat" alt="License" />
 </p>
@@ -85,6 +86,10 @@ flowchart LR
   - Correção automática de ganho no ALSA para codecs sensíveis (ex.: Realtek ALC257).
 - ⏱️ **VAD (Voice Activity Detection) em Tempo Real:** Detecta pausas naturais de silêncio e encerra a gravação automaticamente, unindo todo o áudio antes da transcrição para evitar palavras cortadas.
 - 📌 **Bandeja do Sistema (System Tray):** Fica ativo ouvindo em segundo plano mesmo se a janela for fechada, com menu rápido de ações.
+- 🔊 **Indicadores Sonoros (Chimes):** Beeps futuristas de confirmação ao acordar e ao concluir a fala para saber o status sem olhar pra tela.
+- 💾 **Exportação em Markdown (.md):** Salve o histórico das conversas com um clique, pelo menu da bandeja ou por comando de voz.
+- ⚙️ **Automação do Linux e Ações Locais:** Controle o volume do computador, abra aplicativos (navegador, terminal, arquivos, editor) e consulte hora, data e bateria com a voz.
+- 📜 **Prompt de Sistema Customizável:** Personalize as instruções e o comportamento da IA diretamente na tela de preferências.
 
 ---
 
@@ -217,6 +222,110 @@ Não é necessário esperar o assistente terminar de falar respostas longas:
 - Enquanto o Neo estiver falando, basta dizer **"Acorda, Neo"** (ou *"Pare"*, *"Para"*, *"Silêncio"*).
 - O áudio é cortado **instantaneamente** e o microfone entra imediatamente em modo de escuta para capturar sua nova pergunta.
 
+## 💾 Exportação da Conversa em Markdown
+
+Você pode exportar a qualquer momento todo o histórico do chat em formato Markdown (`.md`):
+- **Pela Interface:** Clique no botão de salvar (`document-save-symbolic`) no cabeçalho da janela e escolha onde salvar o arquivo.
+- **Pela Bandeja:** Clique com o botão direito no ícone da bandeja e selecione *"Exportar Conversa (Markdown)..."*.
+- **Por Voz:** Diga *"Acorda, Neo, exportar conversa"* (ou *"salvar conversa"*). O arquivo será salvo automaticamente na sua pasta `~/Documents`.
+
+---
+
+## ⚙️ Automação do Linux e Comandos de Sistema
+
+O Neo interage nativamente com o sistema Linux para executar comandos instantaneamente sem latência de IA:
+
+- 🔊 **Controle de Volume (PipeWire/PulseAudio via `wpctl` e `pactl`):**
+  - *"Acorda, Neo, aumentar volume"* (+10%)
+  - *"Acorda, Neo, diminuir volume"* (-10%)
+  - *"Acorda, Neo, volume em 60"* (define para 60%)
+  - *"Acorda, Neo, mutar áudio"* / *"Desmutar"*
+  - *"Acorda, Neo, qual é o volume?"*
+- 🚀 **Abertura Rápida de Aplicativos:**
+  - *"Acorda, Neo, abrir navegador"* (Brave, Chrome, Firefox)
+  - *"Acorda, Neo, abrir terminal"* (COSMIC Terminal, GNOME Terminal, etc.)
+  - *"Acorda, Neo, abrir arquivos"* (Gerenciador de arquivos)
+  - *"Acorda, Neo, abrir editor"* (Editor de texto / código)
+  - *"Acorda, Neo, abrir configurações"*
+- ⏱️ **Consultas Rápidas do Computador:**
+  - *"Acorda, Neo, que horas são?"*
+  - *"Acorda, Neo, qual a data de hoje?"*
+  - *"Acorda, Neo, quanto de bateria?"* (informa % de carga e estado da bateria)
+
+---
+
+## 🔊 Efeitos e Indicadores Sonoros (Chimes)
+
+- Som sutil e futurista sintetizado via PCM de baixa latência ao reconhecer a palavra de ativação *"Acorda, Neo"*, permitindo saber que o assistente acordou mesmo sem olhar para a tela.
+- Chime discreto de confirmação ao encerrar a escuta da pergunta e iniciar o pensamento.
+- Pode ser ativado ou desativado facilmente na tela de **Configurações**.
+
+---
+
+## 📜 Personalização do Prompt de Sistema
+
+O painel de preferências inclui um editor multilinhas para o **Prompt de Sistema**:
+- Permite personalizar as instruções de comportamento, tom de voz, brevidade e personalidade da IA.
+- Aplicado automaticamente tanto no **Ollama local** quanto na **Claude**.
+- Botão *"Restaurar Prompt Padrão"* para voltar à configuração original a qualquer momento.
+
+---
+
+## ⚡ Atalho Global de Teclado & Push-to-Talk (IPC Socket)
+
+O **Acorda, Neo** conta com um servidor IPC via UNIX socket (`~/.config/acordaneo/acordaneo.sock`) imune às limitações de segurança do Wayland:
+
+- **Ativação Instantânea:** Permite ativar o microfone de qualquer lugar sem dizer a palavra-chave.
+- **Flags de Linha de Comando:**
+  - `acordaneo --wake` (ou `./run.sh --wake`): Ativa a escuta imediata no assistente já em execução.
+  - `acordaneo --toggle`: Alterna a visibilidade da janela (mostrar / ocultar).
+  - `acordaneo --present`: Traz a janela do assistente para o primeiro plano.
+- **Script de Instalação Automática:**
+  ```bash
+  # Registra o atalho Super+A no GNOME / Pop!_OS automaticamente:
+  ./scripts/instalar_atalho.sh "<Super>a"
+  ```
+  O script também exibe as diretrizes para configurar em **KDE Plasma**, **Hyprland**, **Sway** e **i3**.
+
+---
+
+## ⬇️ Download de Modelos Ollama com Progresso na Interface
+
+Você pode gerenciar e baixar novos modelos de IA diretamente na tela de preferências:
+- Campo de texto para digitar o nome de qualquer modelo do registro Ollama (ex: `deepseek-r1:8b`, `llama3.2:1b`, `qwen2.5:7b`).
+- Barra de progresso contínua em tempo real com indicador de status e porcentagem.
+- Botão para cancelar o download em andamento.
+- Assim que o download é concluído, a lista de modelos disponíveis é atualizada automaticamente.
+
+---
+
+## 🗣️ Síntese de Voz 100% Offline com Piper TTS
+
+Para operação completamente isolada de internet, o Acorda, Neo suporta o **Piper TTS**:
+- Motor neural local ultra-rápido baseado em ONNX runtime.
+- Modelo neural em português brasileiro pré-instalado: `pt_BR-edresson-low`.
+- Zero dependência de conexão de rede e baixíssima latência.
+- Alternância simples nas preferências entre **Edge-TTS (Online)** e **Piper TTS (Offline)** com fallback automático caso a rede esteja indisponível.
+
+---
+
+## 🎯 Palavra de Ativação (Wake Word) Customizável
+
+A palavra de ativação não está engessada em *"Acorda, Neo"*:
+- É possível definir qualquer gatilho nas configurações (ex: *"Computador"*, *"Jarvis"*, *"Neo"*).
+- O Whisper STT adapta dinamicamente seu vocabulário inicial (`initial_prompt`) para maximizar a precisão no gatilho escolhido.
+- A interrupção de fala (barge-in) acompanha dinamicamente a palavra configurada.
+
+---
+
+## 📦 Empacotamento Linux
+
+O projeto inclui receitas e scripts para diferentes formatos de distribuição no Linux:
+- **Flatpak:** Manifest completo em [`packaging/flatpak/com.github.wiskton.AcordaNeo.yaml`](file:///home/willem/Documents/GitHub/acordaneo/packaging/flatpak/com.github.wiskton.AcordaNeo.yaml).
+- **AppImage:** Script de build e AppRun em [`packaging/appimage/`](file:///home/willem/Documents/GitHub/acordaneo/packaging/appimage/).
+- **Arch Linux / AUR:** PKGBUILD pronto para compilação e instalação em [`packaging/aur/PKGBUILD`](file:///home/willem/Documents/GitHub/acordaneo/packaging/aur/PKGBUILD).
+- **Systemd User Service:** Unidade em [`packaging/systemd/acordaneo.service`](file:///home/willem/Documents/GitHub/acordaneo/packaging/systemd/acordaneo.service) para iniciar o assistente automaticamente em segundo plano com a sessão gráfica.
+
 ---
 
 ## 🗺️ Roadmap
@@ -229,8 +338,15 @@ Não é necessário esperar o assistente terminar de falar respostas longas:
 - [x] Memória de contexto multi-turn na conversa
 - [x] Controle de mídia MPRIS (pausar Spotify ao conversar)
 - [x] Botão para limpar a conversa no cabeçalho e comando de voz
-- [ ] Indicadores sonoros (chimes de despertar e finalização)
-- [ ] Atalho global no teclado (Push-to-Talk)
+- [x] Indicadores sonoros (chimes de despertar e finalização)
+- [x] Exportação de histórico de conversa em Markdown
+- [x] Personalização de Prompt de Sistema nas preferências
+- [x] Comandos de automação do sistema Linux (volume, apps, hora/data, bateria)
+- [x] Atalho global no teclado (Push-to-Talk via IPC socket e script de atalho)
+- [x] Download de novos modelos Ollama direto pela interface com barra de progresso
+- [x] Síntese de voz local 100% offline via Piper TTS (modelo neural pt_BR)
+- [x] Palavra de ativação (Wake Word) customizável e adaptável
+- [x] Empacotamento Linux (Flatpak, AppImage, AUR, systemd)
 
 Confira os detalhes completos no documento **[ROADMAP.md](ROADMAP.md)**.
 

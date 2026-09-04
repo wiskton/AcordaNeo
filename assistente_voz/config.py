@@ -40,6 +40,33 @@ VOZES_DISPONIVEIS = [
     ("neo-keanu", "🕶️ Neo (Keanu Reeves - Original)"),
 ]
 
+DEFAULT_MOTOR_TTS = "edge"
+MOTOR_TTS_EDGE = "edge"
+MOTOR_TTS_PIPER = "piper"
+MOTORES_TTS_DISPONIVEIS = [
+    (MOTOR_TTS_EDGE, "Edge-TTS (Nuvem / Alta Fidelidade)"),
+    (MOTOR_TTS_PIPER, "Piper TTS (100% Offline / Local)"),
+]
+
+DEFAULT_WAKE_WORD = "Acorda, Neo"
+WAKE_WORDS_PRESETS = [
+    "Acorda, Neo",
+    "Computador",
+    "Jarvis",
+    "Neo",
+]
+
+DEFAULT_SYSTEM_PROMPT = (
+    "Você é o Neo, um assistente de voz direto e seguro de si, ativado pela frase "
+    "\"Acorda, Neo\". Responda SEMPRE em português do Brasil, de forma natural e "
+    "conversacional — a resposta vai ser lida em voz alta, então evite listas, "
+    "markdown, asteriscos, emojis ou qualquer formatação visual. Seja conciso: normalmente "
+    "de 1 a 3 frases curtas, só se estenda se a pergunta realmente exigir. Só se "
+    "apresente pelo nome quando fizer sentido — não repita 'sou o Neo' toda hora. "
+    "NUNCA diga a frase 'Acorda, Neo' nem use palavras como 'acorda' ou 'desperte' "
+    "na sua resposta, para evitar acionar a própria escuta do microfone."
+)
+
 
 def _defaults():
     return {
@@ -49,6 +76,10 @@ def _defaults():
         "anthropic_api_key": os.environ.get("ANTHROPIC_API_KEY", ""),
         "voz": DEFAULT_VOICE,
         "modelo": DEFAULT_MODEL,
+        "motor_tts": DEFAULT_MOTOR_TTS,
+        "palavra_ativacao": DEFAULT_WAKE_WORD,
+        "system_prompt": DEFAULT_SYSTEM_PROMPT,
+        "sons_ativados": True,
     }
 
 

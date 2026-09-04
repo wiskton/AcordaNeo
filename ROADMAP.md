@@ -33,13 +33,16 @@ Este documento delineia a visão e o planejamento de evolução do **Acorda, Neo
   - Minimiza para a bandeja ao fechar a janela (`X`) para continuar escutando em segundo plano.
   - Menu com ações rápidas (Mostrar / Ocultar, Preferências, Sair).
   - Ícone dinâmico refletindo o estado atual (Ouvindo / Pensando / Falando).
-- [ ] **Indicadores sonoros (Chimes):**
-  - Som sutil ao reconhecer *"Acorda, Neo"* (feedback de que o assistente acordou).
-  - Som discreto ao finalizar a escuta e iniciar o pensamento.
-- [ ] **Atalho global de teclado (Push-to-Talk / Hotkey):**
-  - Tecla de atalho (ex.: `Super + Espaço` ou configurável) para ativar mesmo sem falar o gatilho.
-- [ ] **Histórico e rolagem aprimorados:**
-  - Exportação da conversa em Markdown.
+- [x] **Indicadores sonoros (Chimes):**
+  - Som sutil ao reconhecer *"Acorda, Neo"* (feedback imediato de que o assistente acordou).
+  - Som discreto ao finalizar a escuta e iniciar o processamento/pensamento.
+  - Opção para habilitar/desabilitar efeitos sonoros nas configurações.
+- [x] **Atalho global de teclado (Push-to-Talk / Hotkey):**
+  - Servidor IPC via UNIX socket (`~/.config/acordaneo/acordaneo.sock`) imune a restrições do Wayland.
+  - Flags de linha de comando: `--wake` (ativa escuta imediata), `--toggle` (alterna visibilidade), `--present` (traz para frente).
+  - Script auxiliar `scripts/instalar_atalho.sh` para configuração automática no GNOME, COSMIC, KDE, Sway e Hyprland.
+- [x] **Histórico e rolagem aprimorados:**
+  - [x] Exportação da conversa em Markdown (via botão no cabeçalho, menu da bandeja e comando de voz).
   - [x] Botão para limpar a conversa atual no cabeçalho e comando de voz.
 
 ---
@@ -50,10 +53,12 @@ Este documento delineia a visão e o planejamento de evolução do **Acorda, Neo
 - [x] **Memória contextual multi-turn:**
   - Manter o histórico da sessão para perguntas de acompanhamento (*"Quem dirigiu Matrix?"* -> *"E quais outros filmes elas fizeram?"*).
   - Contexto unificado e persistente entre Ollama e Claude.
-- [ ] **Personalização do Prompt de Sistema:**
-  - Campo nas preferências para personalizar instruções à IA (tom de voz, brevidade, estilo conciso).
-- [ ] **Download de novos modelos direto da interface:**
-  - Campo para digitar o nome de um modelo do Ollama (ex: `deepseek-r1:8b`) e baixar com barra de progresso.
+- [x] **Personalização do Prompt de Sistema:**
+  - Campo nas preferências para personalizar instruções à IA (tom de voz, brevidade, regras personalizadas) e botão para restaurar o padrão.
+- [x] **Download de novos modelos direto da interface:**
+  - Campo nas preferências para digitar o nome do modelo (ex: `deepseek-r1:8b`, `gemma2:2b`, `qwen2.5:7b`).
+  - Barra de progresso contínua em tempo real com indicador de status, porcentagem e botão para cancelar o download.
+  - Atualização automática da lista de modelos disponíveis assim que o download é concluído.
 
 ---
 
@@ -63,12 +68,14 @@ Este documento delineia a visão e o planejamento de evolução do **Acorda, Neo
 - [x] **Integração MPRIS2 (Controle de Mídia):**
   - Pausar Spotify / reprodutor de música automaticamente enquanto o usuário fala e enquanto a IA responde, retomando apenas os players pausados ao finalizar.
   - Comandos diretos de voz para pausar, retomar, próxima e anterior.
-- [ ] **Comandos de sistema e Ferramentas (Tool Calling):**
-  - Controle de volume (*"aumentar volume em 20%"*).
-  - Abrir aplicativos (*"abrir o navegador"*, *"abrir o terminal"*).
-  - Consultas rápidas locais (bateria, clima, hora/data, lembretes).
-- [ ] **Wake Word customizável:**
-  - Integração com `openWakeWord` para treinar e permitir palavras de ativação personalizadas.
+- [x] **Comandos de sistema e Ferramentas (Tool Calling):**
+  - Controle de volume (*"aumentar volume"*, *"diminuir volume"*, *"mutar"*, *"desmutar"*, *"volume em 50%"*).
+  - Abrir aplicativos (*"abrir o navegador"*, *"abrir o terminal"*, *"abrir arquivos"*, *"abrir editor"*, *"abrir configurações"*, *"abrir spotify"*).
+  - Consultas rápidas locais (bateria, hora e data do sistema).
+- [x] **Wake Word customizável:**
+  - Campo de configuração nas preferências para personalizar a palavra ou frase de ativação (ex.: *"Acorda, Neo"*, *"Computador"*, *"Jarvis"*, *"Neo"*).
+  - Adaptação dinâmica do vocabulário do Whisper (`initial_prompt`) para garantir alta taxa de acerto na palavra escolhida.
+  - Interrupção por voz (barge-in) sincronizada dinamicamente com a wake word configurada.
 
 ---
 
@@ -76,10 +83,15 @@ Este documento delineia a visão e o planejamento de evolução do **Acorda, Neo
 *Foco: Total independência de internet e facilidade de instalação.*
 
 - [x] **Provedor LLM Local (Ollama):** Concluído na v0.3!
-- [ ] **TTS Local offline alternativo:**
-  - Suporte ao [Piper TTS](https://github.com/rhasspy/piper) para síntese de voz rápida sem conexão com a internet.
-- [ ] **Empacotamento Flatpak / AppImage / AUR:**
-  - Instalação com um clique em qualquer distribuição Linux.
+- [x] **TTS Local offline alternativo (Piper TTS):**
+  - Suporte ao [Piper TTS](https://github.com/rhasspy/piper) integrado com modelo neural pt_BR (`pt_BR-edresson-low`).
+  - Geração local ultra-rápida sem nenhuma dependência de internet ou serviços externos.
+  - Seletor de motor de voz nas preferências (Edge TTS Online vs Piper TTS Offline) com fallback automático.
+- [x] **Empacotamento Flatpak / AppImage / AUR / systemd:**
+  - Manifest Flatpak (`packaging/flatpak/com.github.wiskton.AcordaNeo.yaml`) para isolamento seguro e distribuição no Flathub.
+  - Scripts AppImage (`packaging/appimage/AppRun` e `packaging/appimage/build-appimage.sh`) para executável universal em qualquer distro.
+  - Script `PKGBUILD` para Arch Linux e AUR (`packaging/aur/PKGBUILD`).
+  - Unidade de serviço de usuário systemd (`packaging/systemd/acordaneo.service`) para inicialização automática no login.
 
 ---
 
